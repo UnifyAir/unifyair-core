@@ -7,14 +7,11 @@ repository.workspace = true
 homepage.workspace = true
 publish.workspace = true
 version = { workspace = true }
-authors = { workspace = true }
-edition = { workspace = true }
-publish = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pfcp = { workspace = true, features = ["rel-15"] }
+# pfcp = { workspace = true, features = ["rel-15"] }
 serde.workspace = true
 serde_yaml.workspace = true
 oasbi.workspace = true
@@ -23,11 +20,10 @@ tokio.workspace = true
 axum.workspace = true
 axum-extra.workspace = true
 openapi-smf.workspace = true
-parsing = { path = "../../utils/parsing" }
 bytes.workspace = true
 thiserror.workspace = true
 tower-http.workspace = true
 tower.workspace = true
 
 [dev-dependencies]
-pfcp = { workspace = true, features = ["tests", "default"] }
+# pfcp = { workspace = true, features = ["tests", "default"] }

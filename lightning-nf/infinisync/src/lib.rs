@@ -1,16 +1,26 @@
-use std::net::SocketAddrV4;
+#![feature(error_generic_member_access)]
 
-use crate::config::InfiniSyncConfig;
-use crate::sbi::start_server;
+use std::{backtrace::Backtrace, net::SocketAddrV4};
 
-pub async fn run(config: &InfiniSyncConfig) {
-	let ip_addr = config.configuration.sbi.binding_ip_v4.parse().unwrap();
+use thiserror::Error;
+
+use crate::{config::InfiniSyncConfig, sbi::start_server};
+
+pub async fn run(config: InfiniSyncConfig) -> Result<(), InfiniSyncError> {
+	let mut ip_addr = config.configuration.sbi.binding_ip_v4;
 	let port = config.configuration.sbi.port;
 	let server_addr = SocketAddrV4::new(ip_addr, port);
-	start_server(&server_addr.to_string()).await;
+	start_server(server_addr.into()).await?;
+	Ok(())
 }
 
 pub mod config;
 mod net_gateways;
-pub mod sbi;
 pub mod pfcp;
+pub mod sbi;
+
+#[derive(Error, Debug)]
+pub enum InfiniSyncError {
+	#[error("Io Error")]
+	IoError(#[from] std::io::Error, #[backtrace] Backtrace),
+}

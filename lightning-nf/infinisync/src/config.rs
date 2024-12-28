@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, net::{Ipv4Addr, Ipv6Addr}};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InfiniSyncConfig {
@@ -37,11 +37,13 @@ pub struct Configuration {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Sbi {
 	pub scheme: String,
-	pub register_ip_v4: String,
-	pub binding_ip_v4: String,
+	pub register_ip_v4: Ipv4Addr,
+	pub binding_ip_v4: Ipv4Addr,
 	pub port: u16,
 	pub tls: TlsConfig,
 }
+
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TlsConfig {
@@ -69,8 +71,8 @@ pub struct DnnInfo {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DnsConfig {
-	pub ipv4: String,
-	pub ipv6: String,
+	pub ipv4: Ipv4Addr,
+	pub ipv6: Ipv6Addr,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,20 +1,13 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+use thiserror::Error;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
-
-pub async fn run(config: &config::DataWarpConfig) {
+pub async fn run(config: config::DataWarpConfig) -> Result <(), DataWarpError> {
     println!("Running with config: {:?}", config);
+    Ok(())
 }
 
 pub mod config;
+
+
+#[derive(Error, Debug)]
+pub enum DataWarpError {}
+
