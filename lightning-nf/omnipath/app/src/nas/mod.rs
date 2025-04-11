@@ -1,6 +1,6 @@
 use std::{future::Future, sync::Arc};
 
-use crate::context::ue_context::UeContext;
+use crate::context::UeContext;
 use nas_context::NasContext;
 use error::NasHandlerError;
 
@@ -10,6 +10,7 @@ mod handlers;
 mod error;
 mod gmm;
 mod builders;
+mod ue_actions;
 
 
 pub trait NasHandler {

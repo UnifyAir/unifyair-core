@@ -65,7 +65,7 @@ impl Configuration {
 			tnl_weight_factor: 0,
 			nf_id: NfInstanceId::from(nf_id),
 		};
-		configuration	
+		configuration
 	}
 
 	pub fn build_nf_services(config: &SerdeValidated<OmniPathConfig>) -> Vec<NfService1> {
@@ -119,12 +119,11 @@ impl AppContextInner {
 	pub fn update_config(
 		&mut self,
 		valid_config: &SerdeValidated<OmniPathConfig>,
-	) {	
+	) {
 		let config = Configuration::new(valid_config);
 		self.config.swap(Arc::new(config));
 		self.sbi.store(Arc::new(valid_config.inner().sbi.clone()));
 	}
-
 
 	/// Retrieves short-lived access to the configuration. Avoid storing the
 	/// returned reference.
@@ -137,8 +136,6 @@ impl AppContextInner {
 	pub fn get_sbi_config(&self) -> Guard<Arc<SbiConfig>> {
 		self.sbi.load()
 	}
-
-	
 
 	/// Updates the configuration and commits the changes atomically.
 	///
@@ -185,11 +182,12 @@ impl Deref for AppContext {
 pub static APP_CONTEXT: OnceCell<AppContext> = OnceCell::const_new();
 
 pub async fn get_global_app_context() -> &'static AppContext {
-    APP_CONTEXT.get_or_init(|| async {
-		// Safety: The config is initialized in the Start of the application. Thus calling this function would always return 
-		// an initialized context.
-		let config = SerdeValidated::new(OmniPathConfig::default()).unwrap();
-        AppContext::initialize(&config)
-    }).await
+	APP_CONTEXT
+		.get_or_init(|| async {
+			// Safety: The config is initialized in the Start of the application. Thus
+			// calling this function would always return an initialized context.
+			let config = SerdeValidated::new(OmniPathConfig::default()).unwrap();
+			AppContext::initialize(&config)
+		})
+		.await
 }
-

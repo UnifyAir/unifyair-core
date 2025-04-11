@@ -1,18 +1,18 @@
 #![feature(error_generic_member_access)]
 
+pub mod builder;
 pub(crate) mod config;
 pub(crate) mod context;
-pub mod builder;
-pub mod ngap;
 pub mod nas;
+pub mod ngap;
 pub mod utils;
-pub use context::app_context::get_global_app_context;
-
 use std::{rc::Rc, sync::Arc};
 
 use client::nrf_client::{NrfClient, NrfManagementError};
 use config::OmniPathConfig;
+pub use context::app_context::get_global_app_context;
 use nf_base::NfInstance;
+use ngap::network::{Network, NetworkError};
 use oasbi::common::NfType;
 use openapi_nrf::models::RegisterNfInstanceHeaderParams;
 use reqwest::{Client, Url};
@@ -21,11 +21,13 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::{
-	config::SerdeValidated,
-	context::app_context::{AppContext, Configuration},
 	builder::sbi::ModelBuildError,
+	config::SerdeValidated,
+	context::{
+		NgapContext,
+		app_context::{AppContext, Configuration},
+	},
 };
-use ngap::{context::NgapContext, network::{Network, NetworkError}};
 
 const SOURCE_TYPE: NfType = NfType::Amf;
 
@@ -138,7 +140,7 @@ impl NfInstance for OmniPathApp {
 			app_context.get_config().ngap_port,
 			&valid_config.inner().configuration.sctp,
 		)?;
-		
+
 		let ngap_context = NgapContext::new(ngap_network);
 		crate::context::app_context::APP_CONTEXT.set(app_context.clone())?;
 
@@ -190,7 +192,6 @@ impl NfInstance for OmniPathApp {
 	}
 
 	async fn deregister_nf(&self) -> Result<(), Self::Error> {
-		let nf_instance_id = self.app_context.get_nf_id().0;
 		self.nrf_client
 			.deregister_nf_instance()
 			.await

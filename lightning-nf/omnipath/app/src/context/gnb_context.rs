@@ -4,11 +4,13 @@ use counter::CounterU64;
 use derive_new::new;
 use ngap_models::{GlobalRanNodeId, PagingDrx};
 use nonempty::NonEmpty;
-use oasbi::common::{PlmnId, Snssai, Tai};
+use oasbi::common::{Snssai, Tai};
 use tokio_util::sync::CancellationToken;
 
-use crate::context::ue_context::UeContext;
-use crate::ngap::{manager::ContextManager, network::TnlaAssociation};
+use crate::{
+	context::ue_context::UeContext,
+	ngap::{manager::ContextManager, network::TnlaAssociation},
+};
 
 #[derive(Debug, new)]
 pub struct GnbContext {

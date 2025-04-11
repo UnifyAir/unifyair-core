@@ -3,7 +3,7 @@ use std::{fmt::Debug, future::Future, pin::Pin, sync::Arc};
 use rustc_hash::FxBuildHasher;
 use scc::hash_map::HashMap as SccHashMap;
 use thiserror::Error;
-use tokio::sync::{OwnedRwLockWriteGuard, RwLock};
+use tokio::sync::OwnedRwLockWriteGuard;
 
 use super::context_queue::ContextQueue;
 

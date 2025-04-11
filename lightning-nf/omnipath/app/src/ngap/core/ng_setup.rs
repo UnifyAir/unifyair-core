@@ -15,10 +15,11 @@ use thiserror::Error;
 use tracing::trace;
 
 use crate::{
+	context::{GnbContext, NgapContext, SupportedTai},
 	get_global_app_context,
 	ngap::{
-		context::{GnbContext, NgapContext, NgapRequestHandler, NgapResponseError, SupportedTai},
 		core::utils::{new_semantic_error_cause, resolve_ran_name},
+		engine::{NgapRequestHandler, NgapResponseError},
 	},
 	utils::{convert as ngap_convert, try_convert as ngap_try_convert},
 };

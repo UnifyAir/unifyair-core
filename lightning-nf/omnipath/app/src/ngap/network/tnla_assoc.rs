@@ -1,20 +1,17 @@
 use std::{
 	hash::{Hash, Hasher},
 	net::SocketAddr,
-	sync::atomic::{AtomicU16, Ordering},
 };
 
 use bytes::{Bytes, BytesMut};
 use counter::CounterUsize;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_sctp::{SctpStream, SendOptions};
-use tracing::{error, info, trace};
 
 use super::TnlaError;
 
 const READ_BUFFER_SIZE: usize = 1024;
 const NGAP_PPID: u32 = 60;
-const NGAP_DTLS_PPID: u32 = 66;
+const _NGAP_DTLS_PPID: u32 = 66;
 
 // Add a static atomic counter for generating unique IDs
 static TNLA_ASSOCIATION_COUNTER: CounterUsize = CounterUsize::new();
@@ -98,7 +95,7 @@ impl TnlaAssociation {
 		// TODO: Add handling for the stream no. here for load balancing
 		let mut send_options = send_options.unwrap_or_default();
 		send_options.ppid = NGAP_PPID;
-		let n = self
+		let _n = self
 			.stream
 			.sendmsg(data.as_ref(), None, &send_options)
 			.await

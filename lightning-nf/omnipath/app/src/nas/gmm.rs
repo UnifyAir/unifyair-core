@@ -4,7 +4,7 @@ use nas_models::parser::GmmMessage;
 
 use statig::prelude::*;
 
-use crate::context::ue_context::UeContext;
+use crate::context::UeContext;
 
 use super::{
 	NasHandler,

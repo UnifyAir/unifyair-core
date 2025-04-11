@@ -3,7 +3,6 @@ members = ["lightning-cli", "lightning-nf/omnipath/*", "utils/*"]
 resolver = "2"
 
 [workspace.package]
-name = "unifyair-core"
 version = "0.1.0"
 edition = "2024"
 authors = ["UnifyAir Maintainers <maintainers@unifyair.com>"]

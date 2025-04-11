@@ -1,34 +1,12 @@
-use std::sync::Arc;
+use std::{num::NonZeroU32, sync::Arc};
 
-use log::trace;
-use ngap_models::{
-	AmfUeNgapId,
-	DownlinkNasTransport,
-	NasPdu,
-	RanUeNgapId,
-	RrcEstablishmentCause,
-	ToNgapPdu,
-};
-
-use crate::ngap::context::{
-	GnbContext,
-	ngap_context::{NgapWriteError, encode_and_write_ngap_pdu},
-};
-use crate::{ngap::manager::Identifiable, utils::models::FiveGSTmsi};
-
-
-use std::num::NonZeroU32;
-
+use derive_new::new;
+use ngap_models::{AmfUeNgapId, RanUeNgapId, RrcEstablishmentCause};
+use non_empty_string::NonEmptyString;
 use statig::awaitable::StateMachine;
 
-use non_empty_string::NonEmptyString;
-use statig::prelude::*;
-
-use crate::nas::nas_context::NasContext;
-use derive_new::new;
-use nas_models::parser::GmmMessage;
-use bytes::Bytes;
-
+use super::GnbContext;
+use crate::{nas::nas_context::NasContext, ngap::manager::Identifiable, utils::models::FiveGSTmsi};
 
 #[derive(new)]
 pub struct UeContext {
@@ -54,7 +32,10 @@ pub struct UeContext {
 }
 
 impl std::fmt::Debug for UeContext {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+	fn fmt(
+		&self,
+		f: &mut std::fmt::Formatter<'_>,
+	) -> std::fmt::Result {
 		f.debug_struct("UeContext")
 			.field("ran_ue_ngap_id", &self.ran_ue_ngap_id)
 			.field("amf_ue_ngap_id", &self.amf_ue_ngap_id)
@@ -78,43 +59,3 @@ impl Identifiable for UeContext {
 		&self.ran_ue_ngap_id
 	}
 }
-
-impl UeContext {
-
-	pub async fn send_downlink_nas_transport(
-		&self,
-		nas_pdu: Vec<u8>,
-	) -> Result<(), NgapWriteError> {
-		let nas_pdu = NasPdu(nas_pdu);
-		let downlink_nas_transport = DownlinkNasTransport {
-			ran_ue_ngap_id: self.ran_ue_ngap_id,
-			amf_ue_ngap_id: self.amf_ue_ngap_id,
-			nas_pdu,
-			..Default::default()
-		};
-
-		let pdu = downlink_nas_transport.to_pdu();
-		encode_and_write_ngap_pdu(self.gnb_context.tnla_association.as_ref(), pdu).await
-	}
-
-	pub async fn handle_nas(&mut self, nas_pdu: Vec<u8>) {
-
-		// * Need some thought here about how to handle this
-		
-		// // Todo: fix this to have a single Bytes for Ngap and Nas
-		// let mut bytes = Bytes::from(nas_pdu);
-
-		// let mut gmm = self.gmm.clone();
-		// // Safety: unwrap over Arc::get_mut will succeed because 
-		// // no one will get a mutable reference to the NasContext
-		// // and that will only be mutated through the StateMachine
-		// // Todo:: make nas_context internal field private by mod __private
-		// if let Ok(gmm_message) = GmmMessage::try_from(&mut bytes) {
-		// 	Arc::get_mut(&mut gmm).unwrap().handle_with_context(&gmm_message, self);
-		// } else {
-		// 	trace!("Invalid NAS PDU: {:?}", bytes);
-		// }
-	}
-}
-
-

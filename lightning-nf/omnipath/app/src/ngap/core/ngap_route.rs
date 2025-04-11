@@ -4,9 +4,8 @@ use ngap_models::{InitiatingMessage, NgapPdu};
 use tracing::error;
 
 use super::utils::new_semantic_error;
-use crate::ngap::context::{
-	GnbContext,
-	NgapContext,
+use crate::context::{GnbContext, NgapContext};
+use crate::ngap::engine::{
 	NgapFailure,
 	NgapRequestHandler,
 	NgapResponseError,
