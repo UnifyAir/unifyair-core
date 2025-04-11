@@ -5,7 +5,9 @@
 [![Discord](https://img.shields.io/discord/1316430894445105283?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/yuJHdZ4vEF)
 [![Twitter](https://img.shields.io/twitter/follow/unifyair?style=social)](https://x.com/unifyair)
 
-> ⚡ High-performance, 3GPP standards-compliant 5G Core Network Functions implementation in Rust
+<picture><img src="https://unifyair.io/assets/top.png" alt="UnifyAir Core"></picture>
+
+⚡ High-performance, 3GPP standards-compliant 5G Core Network Functions implementation in Rust
 
 ## 📑 Table of Contents
 - [🎯 Project Overview](#-project-overview)
