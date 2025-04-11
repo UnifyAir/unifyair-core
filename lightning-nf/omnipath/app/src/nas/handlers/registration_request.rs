@@ -40,7 +40,7 @@ fn initial_registration_handler(nas_registration_request: &nas_message::NasRegis
     }
 
     if let Some(ue_security_capability) = &nas_registration_request.nas_ue_security_capability {
-        nas_context.ue_security_capabliity = Some(ue_security_capability.clone());
+        nas_context.ue_security_capability = Some(ue_security_capability.clone());
     } else {
         return Err(NasHandlerError::FiveGmmCauseError(nas_types::FiveGmmCause::protocol_error_unspecified()));
     }

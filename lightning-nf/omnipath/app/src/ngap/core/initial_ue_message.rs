@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use ngap_models::{AmfUeNgapId, InitialUeMessage, RanUeNgapId};
-use statig::awaitable::IntoStateMachineExt;
 use thiserror::Error;
+use statig::awaitable::IntoStateMachineExt;
 use tokio::sync::OwnedRwLockWriteGuard;
 use crate::context::ue_context::UeContext;
 use crate::nas::nas_context::NasContext;

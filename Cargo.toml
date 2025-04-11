@@ -78,23 +78,23 @@ nonempty = { version = "0.8.1", features = ["serialize"] }
 bitvec = "1.0.1"
 ascii = "1.1.0"
 
-oasbi = { git = "ssh://git@github.com/UnifyAir/open-api.git/", package = "oasbi", branch = "master" }
-openapi-smf = { git = "ssh://git@github.com/UnifyAir/open-api.git/", package = "openapi-smf", features = [
+oasbi = { git = "https://github.com/UnifyAir/open-api.git/", package = "oasbi", branch = "master" }
+openapi-smf = { git = "https://github.com/UnifyAir/open-api.git/", package = "openapi-smf", features = [
     "server",
 ], branch = "master" }
-openapi-chf = { git = "ssh://git@github.com/UnifyAir/open-api.git/", package = "openapi-chf", features = [
+openapi-chf = { git = "https://github.com/UnifyAir/open-api.git/", package = "openapi-chf", features = [
     "server",
 ], branch = "master" }
-openapi-pcf = { git = "ssh://git@github.com/UnifyAir/open-api.git/", package = "openapi-pcf", features = [
+openapi-pcf = { git = "https://github.com/UnifyAir/open-api.git/", package = "openapi-pcf", features = [
     "server",
 ], branch = "master" }
-openapi-udm = { git = "ssh://git@github.com/UnifyAir/open-api.git/", package = "openapi-udm", features = [
+openapi-udm = { git = "https://github.com/UnifyAir/open-api.git/", package = "openapi-udm", features = [
     "server",
 ], branch = "master" }
-openapi-nrf = { git = "ssh://git@github.com/UnifyAir/open-api.git/", package = "openapi-nrf", features = [
+openapi-nrf = { git = "https://github.com/UnifyAir/open-api.git/", package = "openapi-nrf", features = [
     "server",
 ], branch = "master" }
-ngap-models = { git = "ssh://git@github.com/UnifyAir/asn-models.git/", package = "ngap", branch = "master" }
-asn1-per = { git = "ssh://git@github.com/UnifyAir/asn-models.git/", package = "asn1-per", branch = "master" }
-nas-models = { git = "ssh://git@github.com/UnifyAir/nas-models.git/", package = "nas-models", branch = "master" }
+ngap-models = { git = "https://github.com/UnifyAir/asn-models.git/", package = "ngap", branch = "master" }
+asn1-per = { git = "https://github.com/UnifyAir/asn-models.git/", package = "asn1-per", branch = "master" }
+nas-models = { git = "https://github.com/UnifyAir/nas-models.git/", package = "nas-models", branch = "master" }
 

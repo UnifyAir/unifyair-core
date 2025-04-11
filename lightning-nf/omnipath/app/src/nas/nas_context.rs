@@ -9,7 +9,7 @@ pub struct NasContext {
 	#[new(default)]
 	pub registration_request: Option<NasRegistrationRequest>,
 	#[new(default)]
-	pub ue_security_capabliity: Option<nas_types::UeSecurityCapability>,
+	pub ue_security_capability: Option<nas_types::UeSecurityCapability>,
 }
 
 
