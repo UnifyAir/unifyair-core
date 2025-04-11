@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
 use ngap_models::{AmfUeNgapId, InitialUeMessage, RanUeNgapId};
+use statig::awaitable::IntoStateMachineExt;
 use thiserror::Error;
 use tokio::sync::OwnedRwLockWriteGuard;
+use crate::context::ue_context::UeContext;
+use crate::nas::nas_context::NasContext;
 
 use crate::{
 	ngap::{
@@ -12,7 +15,6 @@ use crate::{
 			NgapContext,
 			NgapRequestHandler,
 			NgapResponseError,
-			UeContext,
 		},
 		manager::{ContextError, PinnedSendSyncFuture},
 	},
@@ -49,13 +51,15 @@ impl NgapRequestHandler<InitialUeMessage, Arc<GnbContext>> for NgapContext {
 			five_g_s_tmsi,
 			..
 		} = request;
-		let ue_context = UeContext {
+
+		let ue_context = UeContext::new(
 			ran_ue_ngap_id,
-			gnb_context: state.clone(),
+			AmfUeNgapId(state.amf_ue_id_generator.increment()),
 			rrc_establishment_cause,
-			amf_ue_ngap_id: AmfUeNgapId(state.amf_ue_id_generator.increment()),
-			five_g_s_tmsi: five_g_s_tmsi.map(FiveGSTmsi::from),
-		};
+			state.clone(),
+			five_g_s_tmsi.map(FiveGSTmsi::from),
+			Arc::new(NasContext::new().state_machine()),
+		);
 
 		match state.ue_context_manager.add_context(ue_context).await {
 			Err(ContextError::ContextAlreadyExists(_, inner)) => {

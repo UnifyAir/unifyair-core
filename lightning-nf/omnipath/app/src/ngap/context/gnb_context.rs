@@ -7,7 +7,7 @@ use nonempty::NonEmpty;
 use oasbi::common::{PlmnId, Snssai, Tai};
 use tokio_util::sync::CancellationToken;
 
-use super::UeContext;
+use crate::context::ue_context::UeContext;
 use crate::ngap::{manager::ContextManager, network::TnlaAssociation};
 
 #[derive(Debug, new)]

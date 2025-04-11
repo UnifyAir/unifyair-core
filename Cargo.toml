@@ -67,6 +67,8 @@ rustc-hash = "2.1"
 solana-nohash-hasher = "0.2.1"
 tokio-sctp = "0.2.0"
 valuable = "0.1.0"
+statig = {version = "0.3.0", features = ["async"]}
+non-empty-string = "0.2.6"
 
 # Depenedency of tokio-sctp
 socket2 = "0.4"
@@ -94,4 +96,5 @@ openapi-nrf = { git = "ssh://git@github.com/UnifyAir/open-api.git/", package = "
 ], branch = "master" }
 ngap-models = { git = "ssh://git@github.com/UnifyAir/asn-models.git/", package = "ngap", branch = "master" }
 asn1-per = { git = "ssh://git@github.com/UnifyAir/asn-models.git/", package = "asn1-per", branch = "master" }
+nas-models = { git = "ssh://git@github.com/UnifyAir/nas-models.git/", package = "nas-models", branch = "master" }
 

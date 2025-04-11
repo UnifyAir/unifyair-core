@@ -47,6 +47,7 @@ rustc-hash.workspace = true
 solana-nohash-hasher.workspace = true
 versions.workspace = true
 asn1-per.workspace = true
+nas-models.workspace = true
 ngap-models.workspace = true
 scc.workspace = true
 derive-new.workspace = true
@@ -54,6 +55,8 @@ nonempty.workspace = true
 faster-hex.workspace = true
 valuable.workspace = true
 ascii.workspace = true
+non-empty-string.workspace = true
+statig.workspace = true
 
 counter = { path = "../../../utils/counter" }
 client = { path = "../../../utils/client" }

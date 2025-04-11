@@ -4,6 +4,7 @@ pub(crate) mod config;
 pub(crate) mod context;
 pub mod builder;
 pub mod ngap;
+pub mod nas;
 pub mod utils;
 pub use context::app_context::get_global_app_context;
 
