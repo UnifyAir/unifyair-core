@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # nrf:
+  #   image: free5gc/nrf
+  #   container_name: nrf
+  #   ports:
+  #     - "8000:8000"
+  #   networks:
+  #     nf-network:
+  #       ipv4_address: 10.0.0.4
+
+  # gnbsim:
+  #   image: omecproject/5gc-gnbsim
+  #   container_name: gnbsim
+  #   depends_on:
+  #     - nrf
+  #   networks:
+  #     nf-network:
+  #       ipv4_address: 10.0.0.101
+
+  debug-capture:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: debug-capture
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    networks:
+      nf-network:
+        ipv4_address: 10.0.0.200
+    tty: true
+    stdin_open: true
+
+  # omnipath-app:
+  #   build:
+  #     context: ../../../lighting-nf/omnipath/app
+  #     dockerfile: Dockerfile
+  #   container_name: omnipath-app
+  #   depends_on:
+  #     - nrf
+  #   networks:
+  #     nf-network:
+  #       ipv4_address: 10.0.0.1
+
+networks:
+  nf-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-unifyair
+    ipam:
+      config:
+        - subnet: 10.0.0.0/16
