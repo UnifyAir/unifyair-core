@@ -1,0 +1,55 @@
+info:
+  version: 1.0.3
+  description: CHF initial local configuration
+
+configuration:
+  chfName: CHF # the name of this CHF
+  sbi: # Service-based interface information
+    scheme: http # the protocol for sbi (http or https)
+    registerIPv4: chf.unifyair.com # IP used to register to NRF
+    bindingIPv4: chf.unifyair.com # IP used to bind the service
+    port: 8000 # port used to bind the service
+    tls: # the local path of TLS key
+      pem: cert/chf.pem # CHF TLS Certificate
+      key: cert/chf.key # CHF TLS Private key
+  nrfUri: http://nrf.unifyair.com:8000 # a valid URI of NRF
+  nrfCertPem: cert/nrf.pem # NRF Certificate
+  serviceNameList: # the SBI services provided by this CHF, refer to TS 32.291
+    - nchf-convergedcharging # Nchf_AMPolicyControl service
+  mongodb: # the mongodb connected by this CHF
+    name: free5gc # name of the mongodb
+    url: mongodb://db:27017 # a valid URL of the mongodb
+  quotaValidityTime: 10000
+  volumeLimit: 50000
+  volumeLimitPDU: 10000
+  volumeThresholdRate: 0.8
+  cgf:
+    enable: true
+    hostIPv4: webui
+    port: 2121
+    listenPort: 2122
+    passiveTransferPortRange:
+      start: 2123
+      end: 2130
+    tls:
+      pem: cert/chf.pem
+      key: cert/chf.key
+    cdrFilePath: /tmp
+  abmfDiameter:
+    protocol: tcp
+    hostIPv4: chf.unifyair.com
+    port: 3868
+    tls:
+      pem: cert/chf.pem
+      key: cert/chf.key
+  rfDiameter:
+    protocol: tcp
+    hostIPv4: chf.unifyair.com
+    port: 3869
+    tls:
+      pem: cert/chf.pem # CHF TLS Certificate
+      key: cert/chf.key # CHF TLS Private key
+logger: # log output setting
+  enable: true # true or false
+  level: info # how detailed to output, value: trace, debug, info, warn, error, fatal, panic
+  reportCaller: false # enable the caller report or not, value: true or false
