@@ -1,5 +1,5 @@
 [workspace]
-members = ["lightning-cli", "lightning-nf/omnipath/app", "tests/integration/*", "utils/*"]
+members = ["lightning-cli", "lightning-nf/omnipath/app", "tests/integration", "utils/*"]
 resolver = "2"
 
 [workspace.package]
