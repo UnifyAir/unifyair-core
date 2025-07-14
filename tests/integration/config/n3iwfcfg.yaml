@@ -27,7 +27,7 @@ configuration:
   # --- N2 Interfaces ---
   amfSCTPAddresses: # the IP list of N2 interfaces (SCTP) on AMF when using NGAP
     - ip:
-        - amf.unifyair.com
+        - omnipath.unifyair.com
       port: 38412
   nasTcpPort: 20000 # TCP port which the NAS listens on
 

@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: 2022 Great Software Laboratory Pvt. Ltd
+# SPDX-FileCopyrightText: 2021 Open Networking Foundation <info@opennetworking.org>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
+---
+info:
+  version: 1.0.0
+  description: GNBSIM initial local configuration
+
+configuration:
+  runConfigProfilesAtStart: true
+  singleInterface: false #default value
+  execInParallel: false #run all profiles in parallel
+  httpServer: # Serves APIs to create/control profiles on the go
+    enable: false
+    ipAddr: "POD_IP"
+    port: 8080
+  gnbs: # pool of gNodeBs
+    gnb1:
+      n2IpAddr: gnb.unifyair.com # gNB N2 interface IP address used to connect to AMF
+      n2Port: 9487 # gNB N2 Port used to connect to AMF
+      # n3IpAddr: gnb.unifyair.com # gNB N3 interface IP address used to connect to UPF. when singleInterface mode is false
+      # #n3IpAddr: "POD_IP" # when gnb is deployed in singleInterface mode
+      # n3Port: 2152 # gNB N3 Port used to connect to UPF
+      name: gnb1 # gNB name that uniquely identify a gNB within application
+      globalRanId:
+        plmnId:
+          mcc: 208 # Mobile Country Code (3 digits string, digit: 0~9)
+          mnc: 93 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
+        gNbId:
+          bitLength: 24
+          gNBValue: 000102 # gNB identifier (3 bytes hex string, range: 000000~FFFFFF)
+      supportedTaList:
+        - tac: 000001 # Tracking Area Code (3 bytes hex string, range: 000000~FFFFFF)
+          broadcastPlmnList:
+            - plmnId:
+                mcc: 208
+                mnc: 93
+              taiSliceSupportList:
+                - sst: 1 # Slice/Service Type (uinteger, range: 0~255)
+                  sd: 010203 # Slice Differentiator (3 bytes hex string, range: 000000~FFFFFF)
+                - sst: 1
+                  sd: 112233 
+      defaultAmf:
+        hostName: amf # Host name of AMF
+        ipAddr: omnipath.unifyair.com # AMF IP address
+        port: 38412 # AMF port
+
+  profiles: # profile information
+    - profileType: register # profile type
+      profileName: profile1 # uniqely identifies a profile within application
+      enable: true # Set true to execute the profile, false otherwise.
+      gnbName: gnb1 # gNB to be used for this profile
+      startImsi: 208930000000001
+      ueCount: 1
+      defaultAs: "192.168.250.1" #default icmp pkt destination
+      opc: "8e27b6af0e692e750f32667a3b14605d"
+      key: "8baf473f2f8fd09487cccbd7097c6862"
+      sequenceNumber: "000000000023"
+      dnn: "internet"
+      sNssai:
+        sst: 1 # Slice/Service Type (uinteger, range: 0~255)
+        sd: 010203 # Slice Differentiator (3 bytes hex string, range: 000000~FFFFFF)
+      execInParallel: false #run all subscribers within profile in parallel
+      plmnId: # Public Land Mobile Network ID, <PLMN ID> = <MCC><MNC>
+        mcc: 208 # Mobile Country Code (3 digits string, digit: 0~9)
+        mnc: 93 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
+
+logger:
+  logLevel: info # how detailed the log will be, values: debug, info, warn, error, fatal, panic

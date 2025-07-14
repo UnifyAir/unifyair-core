@@ -1,0 +1,360 @@
+services:
+  capturer:
+    build:
+      context: ./sniffer
+      dockerfile: Dockerfile # Assumes your Dockerfile is named 'Dockerfile'
+    # command: python3 capturer.py
+    # UPDATED: Command now runs tshark directly and writes to a shared volume.
+    # It first touches /tmp/healthy to ensure the healthcheck passes.
+    command: sh -c "touch /tmp/healthy && tshark -i br-unifyair -f \"sctp or tcp or udp\" -w /capture/traffic.pcap"
+    container_name: capturer
+    volumes:
+      - ./capture:/capture
+    network_mode: host
+    # privileged: true
+    # CRITICAL: Add capabilities to allow packet sniffing
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+      - SYS_ADMIN
+    healthcheck:
+      test: [ "CMD", "test", "-f", "/tmp/healthy" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  db:
+    container_name: mongodb
+    image: mongo:6.0.24
+    command: mongod --port 27017
+    expose:
+      - "27017"
+    volumes:
+      - dbdata:/data/db
+    depends_on:
+      capturer:
+        condition: service_healthy
+    networks:
+      nf-network:
+        ipv4_address: 10.0.100.0
+        aliases:
+          - mongo.unifyair.com
+          - db
+
+  # TODO: Needs gtp5g kernel module
+  upf:
+    container_name: upf
+    image: free5gc/upf:v4.0.1
+    # TODO: Add eBPF-based UPF solution here instead of free5gc?
+    command: bash -c "./upf-iptables.sh && ./upf -c ./config/upfcfg.yaml"
+    volumes:
+      - ./config/upfcfg.yaml:/free5gc/config/upfcfg.yaml
+      - ./config/upf-iptables.sh:/free5gc/upf-iptables.sh
+    cap_add:
+      - NET_ADMIN
+    networks:
+      nf-network:
+        ipv4_address: 10.0.0.4
+        aliases:
+          - upf.unifyair.com
+
+  nrf:
+    image: free5gc/nrf
+    container_name: nrf
+    command: ./nrf -c ./config/nrfcfg.yaml
+    volumes:
+      - ./config/nrfcfg.yaml:/free5gc/config/nrfcfg.yaml
+      - ./cert:/free5gc/cert
+      - ./capture:/capture
+    environment:
+      DB_URI: mongodb://db/free5gc
+      GIN_MODE: release
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_started
+      capturer:
+        condition: service_healthy
+    networks:
+      nf-network:
+        ipv4_address: 10.0.0.5
+        aliases:
+          - nrf.unifyair.com
+  webui:
+    container_name: webui
+    image: free5gc/webui:v4.0.1
+    command: timeout 60 ./webui -c ./config/webuicfg.yaml || echo "Webui Stopped"
+    expose:
+      - "2121"
+      - "5000"
+    volumes:
+      - ./config/webuicfg.yaml:/free5gc/config/webuicfg.yaml
+    environment:
+      - GIN_MODE=release
+    networks:
+      nf-network:
+        ipv4_address: 10.0.255.0
+        aliases:
+          - webui.unifyair.com
+    ports:
+      - "5001:5000"
+      - "2122:2122"
+      - "2121:2121"
+    depends_on:
+      - db
+      - nrf
+    healthcheck:
+      # TODO: Modify Dockerfile to install curl and check if webui is started
+      # test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      test: [ "CMD", "true" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  user-init:
+    build:
+      context: ./user-init
+      dockerfile: Dockerfile
+    container_name: user-init
+    # Add sleep for webui startup
+    command: python create-user.py -c ./config/userinitcfg.yaml
+    volumes:
+      - ./config/userinitcfg.yaml:/app/config/userinitcfg.yaml
+    depends_on:
+      db:
+        condition: service_started
+      nrf:
+        condition: service_started
+      webui:
+        condition: service_healthy
+    networks:
+      nf-network:
+        ipv4_address: 10.0.255.1
+
+  omnipath:
+    image: unifyair/omnipath
+    container_name: omnipath
+    command: ./lightning-cli omnipath --config ./config/omnipathcfg.yaml
+    # command: tail -f /dev/null
+    environment:
+      COLORBT_SHOW_HIDDEN: 1
+      RUST_BACKTRACE: full
+    # command: tail -f /dev/null
+    volumes:
+      - ./config/omnipathcfg.yaml:/unifyair/config/omnipathcfg.yaml
+    expose:
+      - "8000"
+      - "38412"
+    depends_on:
+      nrf:
+        condition: service_started
+      user-init:
+        condition: service_completed_successfully
+    networks:
+      nf-network:
+        ipv4_address: 10.0.0.2
+        aliases:
+          - omnipath.unifyair.com
+    healthcheck:
+      # TODO: Have this healthcheck after the NF has been registered successfully
+      # test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      test: [ "CMD", "true" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+
+  ausf:
+    container_name: ausf
+    image: free5gc/ausf:v4.0.1
+    command: ./ausf -c ./config/ausfcfg.yaml
+    expose:
+      - "8000"
+    volumes:
+      - ./config/ausfcfg.yaml:/free5gc/config/ausfcfg.yaml
+      - ./cert:/free5gc/cert
+    environment:
+      GIN_MODE: release
+    networks:
+      nf-network:
+        ipv4_address: 10.0.0.6
+        aliases:
+          - ausf.unifyair.com
+    depends_on:
+      - nrf
+
+  nssf:
+    container_name: nssf
+    image: free5gc/nssf:v4.0.1
+    command: ./nssf -c ./config/nssfcfg.yaml
+    expose:
+      - "8000"
+    volumes:
+      - ./config/nssfcfg.yaml:/free5gc/config/nssfcfg.yaml
+      - ./cert:/free5gc/cert
+    environment:
+      GIN_MODE: release
+    networks:
+      nf-network:
+        ipv4_address: 10.0.0.8
+        aliases:
+          - nssf.unifyair.com
+    depends_on:
+      - nrf
+
+  pcf:
+    container_name: pcf
+    image: free5gc/pcf:v4.0.1
+    command: ./pcf -c ./config/pcfcfg.yaml
+    expose:
+      - "8000"
+    volumes:
+      - ./config/pcfcfg.yaml:/free5gc/config/pcfcfg.yaml
+      - ./cert:/free5gc/cert
+    environment:
+      GIN_MODE: release
+    networks:
+      nf-network:
+        ipv4_address: 10.0.0.7
+        aliases:
+          - pcf.unifyair.com
+    depends_on:
+      - nrf
+
+  smf:
+    container_name: smf
+    image: free5gc/smf:v4.0.1
+    command: ./smf -c ./config/smfcfg.yaml -u ./config/uerouting.yaml
+    expose:
+      - "8000"
+    volumes:
+      - ./config/smfcfg.yaml:/free5gc/config/smfcfg.yaml
+      - ./config/uerouting.yaml:/free5gc/config/uerouting.yaml
+      - ./cert:/free5gc/cert
+    environment:
+      GIN_MODE: release
+    networks:
+      nf-network:
+        ipv4_address: 10.0.0.3
+        aliases:
+          - smf.unifyair.com
+    depends_on:
+      - nrf
+      - upf
+
+  udm:
+    container_name: udm
+    image: free5gc/udm:v4.0.1
+    command: ./udm -c ./config/udmcfg.yaml
+    expose:
+      - "8000"
+    volumes:
+      - ./config/udmcfg.yaml:/free5gc/config/udmcfg.yaml
+      - ./cert:/free5gc/cert
+    environment:
+      GIN_MODE: release
+    networks:
+      nf-network:
+        ipv4_address: 10.0.0.9
+        aliases:
+          - udm.unifyair.com
+    depends_on:
+      - db
+      - nrf
+
+  udr:
+    container_name: udr
+    image: free5gc/udr:v4.0.1
+    command: ./udr -c ./config/udrcfg.yaml
+    expose:
+      - "8000"
+    volumes:
+      - ./config/udrcfg.yaml:/free5gc/config/udrcfg.yaml
+      - ./cert:/free5gc/cert
+    environment:
+      DB_URI: mongodb://db/free5gc
+      GIN_MODE: release
+    networks:
+      nf-network:
+        ipv4_address: 10.0.0.10
+        aliases:
+          - udr.unifyair.com
+    depends_on:
+      - db
+      - nrf
+
+  chf:
+    container_name: chf
+    image: free5gc/chf:v4.0.1
+    command: ./chf -c ./config/chfcfg.yaml
+    expose:
+      - "8000"
+    volumes:
+      - ./config/chfcfg.yaml:/free5gc/config/chfcfg.yaml
+      - ./cert:/free5gc/cert
+    environment:
+      DB_URI: mongodb://db/free5gc
+      GIN_MODE: release
+    networks:
+      nf-network:
+        ipv4_address: 10.0.0.12
+        aliases:
+          - chf.unifyair.com
+    depends_on:
+      - db
+      - nrf
+      - webui
+
+  nef:
+    container_name: nef
+    image: free5gc/nef:latest
+    command: ./nef -c ./config/nefcfg.yaml
+    expose:
+      - "8000"
+    volumes:
+      - ./config/nefcfg.yaml:/free5gc/config/nefcfg.yaml
+      - ./cert:/free5gc/cert
+    environment:
+      GIN_MODE: release
+    networks:
+      nf-network:
+        ipv4_address: 10.0.0.24
+        aliases:
+          - nef.unifyair.com
+    depends_on:
+      - db
+      - nrf
+
+  gnbsim:
+    image: omecproject/5gc-gnbsim:rel-1.6.3
+    container_name: gnbsim
+    command: gnbsim --cfg ./config/gnbsimcfg.yaml
+    volumes:
+      - ./config/gnbsimcfg.yaml:/gnbsim/config/gnbsimcfg.yaml
+    expose:
+      - 2152
+      - 9487
+    depends_on:
+      omnipath:
+        condition: service_healthy
+    networks:
+      nf-network:
+        ipv4_address: 10.0.1.0
+        aliases:
+          - gnb.unifyair.com
+
+networks:
+  nf-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-unifyair
+    ipam:
+      config:
+        - subnet: 10.0.0.0/16
+
+volumes:
+  dbdata:
