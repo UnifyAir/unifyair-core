@@ -1,0 +1,27 @@
+# Ignore build artifacts
+target
+# Ignore deployment scripts and configs (unless you need them in the image)
+deploy/
+Dockerfile
+
+.dockerignore
+.git
+.gitignore
+
+
+# Ignore editor/project files
+*.swp
+*.swo
+*.bak
+*.tmp
+*.log
+.DS_Store
+.idea/
+.vscode/
+
+# Ignore test and coverage outputs
+coverage/
+
+# Ignore OS-specific files
+Thumbs.db
+ehthumbs.db

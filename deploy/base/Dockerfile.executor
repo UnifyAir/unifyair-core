@@ -1,0 +1,12 @@
+FROM debian:bookworm-slim AS executor
+
+LABEL maintainer="UnifyAir <support@unifyair.com>"
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    ca-certificates \
+    libsctp1 
+
+# Clean apt cache
+RUN apt-get clean
