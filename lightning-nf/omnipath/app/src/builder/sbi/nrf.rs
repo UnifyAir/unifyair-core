@@ -24,16 +24,23 @@ impl AppContext {
 			.iter()
 			.map(|e| e.plmn_id.clone())
 			.collect::<Vec<_>>();
-		let nf_profile = NfProfile1Unchecked {
+		let mut nf_profile = NfProfile1Unchecked {
 			nf_instance_id: config.nf_id,
 			nf_type: NfType::Amf,
 			nf_status: NfStatus::Registered,
 			amf_info: Some(amf_info),
 			plmn_list,
-			ipv4_addresses: vec![sbi.register_ipv4.into()],
 			nf_services: config.nf_services.clone(),
 			..Default::default()
 		};
+		match &sbi.register_ip {
+			std::net::IpAddr::V4(v4) => {
+				nf_profile.ipv4_addresses = vec![v4.into()];
+			}
+			std::net::IpAddr::V6(v6) => {
+				nf_profile.ipv6_addresses = vec![v6.into()];
+			}		
+		}
 		trace!("NfProfile 1: {:#?}", nf_profile);
 		Ok(nf_profile.try_into()?)
 	}

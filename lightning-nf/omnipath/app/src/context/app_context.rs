@@ -70,7 +70,7 @@ impl Configuration {
 
 	pub fn build_nf_services(config: &SerdeValidated<OmniPathConfig>) -> Vec<NfService1> {
 		let config = config.inner();
-		let api_prefix = Some(config.sbi.get_ipv4_uri());
+		let api_prefix = Some(config.sbi.get_ip_uri());
 		let version_uri = format!("v{}", config.info.version.major);
 		let service_list = config
 			.sbi
@@ -78,6 +78,18 @@ impl Configuration {
 			.iter()
 			.enumerate()
 			.map(|(i, service_name)| -> NfService1 {
+				let mut ip_endpoint = IpEndPoint {
+					transport: Some(TransportProtocol::Tcp),
+					..Default::default()
+				};
+				match &config.sbi.register_ip {
+					IpAddr::V4(v4) => {
+						ip_endpoint.ipv4_address = Some(v4.into());
+					}
+					IpAddr::V6(v6) => {
+						ip_endpoint.ipv6_address = Some(v6.into());
+					}
+				};
 				let nf_service = NfService1 {
 					api_prefix: api_prefix.clone(),
 					service_instance_id: i.to_string(),
@@ -89,12 +101,7 @@ impl Configuration {
 					}],
 					scheme: config.sbi.scheme.clone(),
 					nf_service_status: NfServiceStatus::Registered,
-					ip_end_points: vec![IpEndPoint {
-						ipv4_address: Some(config.sbi.register_ipv4.into()),
-						transport: Some(TransportProtocol::Tcp),
-						port: Some(config.sbi.port),
-						..Default::default()
-					}],
+					ip_end_points: vec![ip_endpoint],
 					..Default::default()
 				};
 				nf_service

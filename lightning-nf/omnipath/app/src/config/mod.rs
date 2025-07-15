@@ -1,6 +1,10 @@
-use std::net::{IpAddr, Ipv4Addr};
-use nonempty::NonEmpty;
+use std::{
+	net::{IpAddr, Ipv4Addr, ToSocketAddrs},
+	str::FromStr,
+};
+
 use nf_base::{LoggingConfig, NfConfig, RuntimeConfig};
+use nonempty::NonEmpty;
 use oasbi::{
 	common::{Guami, PlmnId, Snssai, Tai, Uri, UriScheme},
 	nrf::types::ServiceName,
@@ -9,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use serde_with::{DisplayFromStr, serde_as};
 use tokio_sctp::InitMsg;
+use tracing::info;
 
 #[derive(Serialize, Deserialize, Debug, Validate, Default)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +40,7 @@ pub struct Info {
 #[serde(rename_all = "camelCase")]
 pub struct Configuration {
 	pub amf_name: String,
+	#[serde(deserialize_with = "deserialize_ip_list")]
 	pub ngap_ip_list: Vec<IpAddr>,
 	pub ngap_port: u16,
 	#[default(_code = "NonEmpty::new(Guami::default())")]
@@ -68,10 +74,12 @@ pub struct Configuration {
 pub struct Sbi {
 	#[serde(default = "UriScheme::default")]
 	pub scheme: UriScheme,
-	#[default(_code = "std::net::Ipv4Addr::LOCALHOST")]
-	pub register_ipv4: Ipv4Addr,
-	#[default(_code = "std::net::Ipv4Addr::LOCALHOST")]
-	pub binding_ipv4: Ipv4Addr,
+	#[default(_code = "IpAddr::V4(Ipv4Addr::LOCALHOST)")]
+	#[serde(deserialize_with = "deserialize_ip_addr")]
+	pub register_ip: IpAddr,
+	#[default(_code = "IpAddr::V4(Ipv4Addr::LOCALHOST)")]
+	#[serde(deserialize_with = "deserialize_ip_addr")]
+	pub binding_ip: IpAddr,
 	pub port: u16,
 	pub tls: Tls,
 	#[validate(min_items = 1)]
@@ -195,11 +203,11 @@ impl NfConfig for OmniPathConfig {
 }
 
 impl Sbi {
-	pub fn get_ipv4_uri(&self) -> String {
+	pub fn get_ip_uri(&self) -> String {
 		format!(
 			"{}://{}:{}",
 			self.scheme.to_string(),
-			self.register_ipv4,
+			self.register_ip,
 			self.port
 		)
 	}
@@ -215,7 +223,6 @@ fn display_slice<T: ToString>(input: &[T]) -> String {
 
 pub struct SerdeValidated<T>(T);
 impl<T: Validate> SerdeValidated<T> {
-
 	pub fn new(value: T) -> Result<Self, serde_valid::validation::Errors> {
 		value.validate()?;
 		Ok(SerdeValidated(value))
@@ -228,4 +235,56 @@ impl<T: Validate> SerdeValidated<T> {
 	pub fn into_inner(self) -> T {
 		self.0
 	}
+}
+
+/// Helper function to resolve a string to IpAddr
+/// If the string is a valid IP address, it parses it directly
+/// Otherwise, it performs a DNS lookup to resolve the hostname
+fn resolve_ip_or_hostname(s: &str) -> Result<IpAddr, Box<dyn std::error::Error + Send + Sync>> {
+
+	info!("Resolving Address: {s}");
+
+	// First, try to parse as a direct IP address
+	if let Ok(ip_addr) = IpAddr::from_str(s) {
+		info!("Resolved Address: {ip_addr}");
+		return Ok(ip_addr);
+	}
+
+	// If direct parsing fails, try DNS lookup using std::net
+	let addresses: Vec<std::net::SocketAddr> = (s, 80).to_socket_addrs()?.collect();
+	// Take the first resolved address
+	if let Some(socket_addr) = addresses.into_iter().next() {
+		info!("Resolved Address: {}", socket_addr.ip());
+		Ok(socket_addr.ip())
+	} else {
+		Err(format!("Could not resolve hostname: {}", s).into())
+	}
+}
+
+/// Custom deserializer for IpAddr that can handle both IP addresses and
+/// hostnames
+fn deserialize_ip_addr<'de, D>(deserializer: D) -> Result<IpAddr, D::Error>
+where
+	D: serde::Deserializer<'de>,
+{
+	let string: String = String::deserialize(deserializer)?;
+
+	resolve_ip_or_hostname(&string).map_err(serde::de::Error::custom)
+}
+
+/// Custom deserializer for Vec<IpAddr> that can handle both IP addresses and
+/// hostnames
+fn deserialize_ip_list<'de, D>(deserializer: D) -> Result<Vec<IpAddr>, D::Error>
+where
+	D: serde::Deserializer<'de>,
+{
+	let strings: Vec<String> = Vec::deserialize(deserializer)?;
+	let mut ip_addrs = Vec::new();
+
+	for s in strings {
+		let ip_addr = resolve_ip_or_hostname(&s).map_err(serde::de::Error::custom)?;
+		ip_addrs.push(ip_addr);
+	}
+
+	Ok(ip_addrs)
 }
