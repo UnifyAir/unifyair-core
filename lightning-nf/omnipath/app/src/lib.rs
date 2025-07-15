@@ -126,6 +126,7 @@ impl NfInstance for OmniPathApp {
 		config: Self::Config,
 		shutdown: CancellationToken,
 	) -> Result<Self, Self::Error> {
+		info!("Amf Started");
 		let nrf_uri = &config.configuration.nrf_uri.to_string();
 		let nrf_url = Url::parse(nrf_uri)
 			.map_err(|e| OmniPathConfigError::InvalidNrfUriError(e, nrf_uri.to_owned()))?;

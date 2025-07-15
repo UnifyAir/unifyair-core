@@ -105,8 +105,11 @@ impl NgapContext {
 		let self_clone = self.clone();
 		tokio::spawn(
 			async move {
-				let res = self_clone.run_ngap_loop(gnb_context.clone()).await;
-				let _ = res.map_err(|e| error!(diagnostic = "Error running NGAP loop", error = ?e));
+				let res = self_clone.clone().run_ngap_loop(gnb_context.clone()).await;
+				match res {
+					Ok(()) => self_clone.close_ran_connection(gnb_context).await,
+					Err(e) => error!(diagnostic = "Error running NGAP loop", error = ?e)
+				};
 				// TODO: Implement cleanup logic for gNB context and UE contexts
 			}
 			.instrument(tracing::trace_span!(
@@ -252,13 +255,26 @@ impl NgapContext {
 		self: Arc<Self>,
 		gnb_context: Arc<GnbContext>,
 	) -> Result<(), NetworkError> {
-		while let Ok(Some(message)) = gnb_context.tnla_association.read_data().await {
+		loop {
+			let tnla_assoc_id = gnb_context.tnla_association.id;
+			let read_message = gnb_context
+				.tnla_association
+				.read_data()
+				.await
+				.map_err(|err| NetworkError::TnlaReadError(tnla_assoc_id, err))?;
+			let message = match read_message {
+				Some(message) => message,
+				None => return Ok(()),
+			};
 			let gnb_context_clone = gnb_context.clone();
 			let self_clone = self.clone();
 			tokio::spawn(async move {
 				let pdu = decode_ngap_pdu(&message);
 				let response = match pdu {
-					Ok(pdu) => self_clone.ngap_route(gnb_context_clone.clone(), pdu).await,
+					Ok(pdu) => {
+						info!("Received NgapPdu {:?}", pdu);
+						self_clone.ngap_route(gnb_context_clone.clone(), pdu).await
+					}
 					Err((pdu, error)) => {
 						error!(diagnostic = "Error decoding NGAP PDU", error = ?error);
 						Some(pdu)
@@ -281,7 +297,22 @@ impl NgapContext {
 				}
 			});
 		}
-		Ok(())
+	}
+
+
+	// TODO: Graceful RAN Connection Teardown
+	// When closing a RAN (gNB) connection, we must ensure that all associated UE (User Equipment) contexts are properly notified and their running tasks are cleanly shut down.
+	// This requires broadcasting a cancellation or shutdown signal to all UEs managed by this gNB, and ensuring that any async tasks (e.g., per-UE message handlers, timers) are cancelled or awaited.
+	// The complexity arises from:
+	//   - Tracking all active UE contexts and their associated tasks
+	//   - Ensuring no new tasks are spawned after shutdown begins
+	//   - Avoiding race conditions between UE removal and task cancellation
+	//   - Handling in-flight messages and resource cleanup
+	// Consider using a broadcast channel or cancellation token per UE, and a coordinated shutdown procedure for robust cleanup.
+	pub async fn close_ran_connection(&self, gnb_context: Arc<GnbContext>) {
+		let ran_node_id = gnb_context.global_ran_node_id.clone();
+		info!("Ran Connection Closed: {:?}", ran_node_id);
+		self.gnb_contexts.remove_async(&ran_node_id).await;
 	}
 
 	// TODO: Implement graceful shutdown for the network
