@@ -27,6 +27,7 @@ impl App {
 	}
 
 	fn run<T: NfInstance>(config_path: &str) -> color_eyre::Result<()> {
+		install_tracing();
 		let nf_app: NfApp<T> = NfApp::new(config_path)?;
 		let runtime_config = nf_app.config.get_runtime_config();
 		let logging_config = nf_app.config.get_log_config();
@@ -83,7 +84,10 @@ pub enum NfError<T> {
 		#[source]
 		T,
 	),
-	#[error("RuntimeWithDeregistrationError: Runtime error and unable to deregister : \nMain App Error - {0} \nDeregisteration Error {1}")]
+	#[error(
+		"RuntimeWithDeregistrationError: Runtime error and unable to deregister : \nMain App \
+		 Error - {0} \nDeregisteration Error {1}"
+	)]
 	RuntimeWithDeregistrationError(
 		#[backtrace]
 		#[source]
@@ -124,6 +128,7 @@ impl<T: NfInstance> NfApp<T> {
 			};
 			shutdown_token.cancel();
 		});
+		info!("Starting App Initialization");
 		let nf_app = T::initialize(self.config, self.cancellation_token)
 			.map_err(NfError::InitializationFailedError)?;
 		info!("App Initialized Successfully");
@@ -135,7 +140,7 @@ impl<T: NfInstance> NfApp<T> {
 				nf_app.register_nf().await?;
 				info!("Nf Registered Successfully");
 				nf_app.start().await?;
-				info!("Nf Started Successfully");
+				info!("Nf Execution Completed");
 				Ok(())
 			 } => {
 				let dreg_res = nf_app.deregister_nf().await;
@@ -154,8 +159,7 @@ impl<T: NfInstance> NfApp<T> {
 	}
 }
 
-fn setup_logging(config: &LoggingConfig) -> Result<(), AppSetupError> {
-	install_tracing();
+fn setup_logging(_config: &LoggingConfig) -> Result<(), AppSetupError> {
 	Ok(())
 }
 
