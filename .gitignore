@@ -23,10 +23,10 @@ Session.vim
 .settings/
 .vs/
 
-# Log files
+## Log files
 *.log
 
-# Environment
+## Environment
 *.env
 
 
@@ -48,7 +48,7 @@ build/
 /src/tools/x/target
 Cargo.lock
 
-# Created by default with `src/ci/docker/run.sh`
+## Created by default with `src/ci/docker/run.sh`
 /obj/
 
 
@@ -58,15 +58,19 @@ __pycache__/
 *$py.class
 
 
-# Applications
+## Applications
 *.app
 *.exe
 *.war
 
-# Large media files
+## Large media files
 *.mp4
 *.tiff
 *.avi
 *.flv
 *.mov
 *.wmv
+
+## Ignore the pcaps and certificates generated during integration tests
+tests/integration/capture/*
+tests/integration/cert/*
