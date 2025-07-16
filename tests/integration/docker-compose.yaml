@@ -3,26 +3,28 @@ services:
     build:
       context: ./sniffer
       dockerfile: Dockerfile # Assumes your Dockerfile is named 'Dockerfile'
-    # command: python3 capturer.py
-    # UPDATED: Command now runs tshark directly and writes to a shared volume.
-    # It first touches /tmp/healthy to ensure the healthcheck passes.
-    command: sh -c "touch /tmp/healthy && tshark -i br-unifyair -f \"sctp or tcp or udp\" -w /capture/traffic.pcap"
+    command:  sh -c "rm -rf /app/capture/* /app/capture/.* 2>/dev/null || true;  /usr/bin/supervisord -c ./supervisord.conf"
     container_name: capturer
     volumes:
-      - ./capture:/capture
+      - ./capture:/app/capture
+      - ./sniffer/capturer.py:/app/capturer.py
+      - ./sniffer/supervisord.conf:/app/supervisord.conf
     network_mode: host
-    # privileged: true
     # CRITICAL: Add capabilities to allow packet sniffing
-    cap_add:
-      - NET_RAW
-      - NET_ADMIN
-      - SYS_ADMIN
+    # cap_add:
+    #   - NET_RAW
+    #   - NET_ADMIN
+    #   - SYS_ADMIN
+    privileged: true 
+    stop_grace_period: 1m10s
+    depends_on:
+      - db
     healthcheck:
-      test: [ "CMD", "test", "-f", "/tmp/healthy" ]
+      test: [ "CMD", "sh", "-c", "ls -A /app/capture | grep -q ." ]
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 20s
 
   db:
     container_name: mongodb
@@ -30,17 +32,15 @@ services:
     command: mongod --port 27017
     expose:
       - "27017"
-    volumes:
-      - dbdata:/data/db
-    depends_on:
-      capturer:
-        condition: service_healthy
+    ports:
+      - "27017:27017"
     networks:
       nf-network:
         ipv4_address: 10.0.100.0
         aliases:
           - mongo.unifyair.com
           - db
+    stop_grace_period: 1m10s
 
   # TODO: Needs gtp5g kernel module
   upf:
@@ -77,6 +77,7 @@ services:
         condition: service_started
       capturer:
         condition: service_healthy
+    stop_grace_period: 1m
     networks:
       nf-network:
         ipv4_address: 10.0.0.5
@@ -352,9 +353,8 @@ networks:
     driver: bridge
     driver_opts:
       com.docker.network.bridge.name: br-unifyair
+      com.docker.network.driver.mtu: 65535
     ipam:
       config:
         - subnet: 10.0.0.0/16
 
-volumes:
-  dbdata:
