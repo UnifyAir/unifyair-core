@@ -8,6 +8,7 @@ services:
     volumes:
       - ./capture:/app/capture
       - ./sniffer/capturer.py:/app/capturer.py
+      - ./sniffer/h2_decoder:/app/h2_decoder
       - ./sniffer/supervisord.conf:/app/supervisord.conf
     network_mode: host
     # CRITICAL: Add capabilities to allow packet sniffing

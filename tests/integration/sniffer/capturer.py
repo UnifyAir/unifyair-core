@@ -20,7 +20,7 @@ from watchdog.events import FileSystemEventHandler
 from scapy.utils import wrpcap
 from scapy.contrib.http2 import *
 from scapy.config import conf
-from h2decoder import HTTP2Decoder
+from h2_decoder import HTTP2Decoder
 
 conf.use_pcap = True
 
@@ -80,6 +80,8 @@ http2_connections = {}
 
 # --- HTTP/1 outstanding requests for merging with responses ---
 http1_outstanding_requests = {}
+
+http2_decoder = None
 
 # --- HTTP/1 methods ---
 HTTP_METHODS = [
@@ -155,7 +157,10 @@ def setup_logging(log_level=logging.INFO):
 
     # Silence scapy warnings
     logging.getLogger("scapy").setLevel(logging.ERROR)
-
+    logging.getLogger("watchdog").setLevel(logging.ERROR)
+    logging.getLogger("h2_decoder").setLevel(log_level)
+    logging.getLogger("h2_decoder").handlers.clear()
+    logging.getLogger("h2_decoder").addHandler(handler)
 
 def format_and_log_payload(
     proto: str, src_ip: str, dst_ip: str, src_port: int, dst_port: int, payload: bytes
@@ -308,7 +313,8 @@ def store_reconstructed_payload(
     resp_headers=None,
     resp_status=None,
     resp_reason=None,
-    method = None,
+    method=None,
+    additional_data={},
 ):
     src_ip_alias = IP_TO_ALIAS[src_ip]
     dst_ip_alias = IP_TO_ALIAS[dst_ip]
@@ -316,8 +322,8 @@ def store_reconstructed_payload(
         "protocol": protocol,
         "src_ip": src_ip,
         "dst_ip": dst_ip,
-        "src_port": src_ip,
-        "dst_port": dst_ip,
+        "src_port": src_port,
+        "dst_port": dst_port,
         "src_alias": src_ip_alias,
         "dst_alias": dst_ip_alias,
         "req_headers": req_headers,
@@ -329,6 +335,7 @@ def store_reconstructed_payload(
         "request": request,
         "response": response,
         "method": method,
+        "additional_data": additional_data,
     }
     reconstructed_payloads.append(entry)
     # Log the reconstructed payload in a readable format
@@ -349,69 +356,70 @@ def store_reconstructed_payload(
         f"  Request: {format_payload_for_log(request)}",
         f"  Response: {format_payload_for_log(response)}",
         f"  Payload: {format_payload_for_log(payload)}",
+        f"  Additional Data: {format_payload_for_log(additional_data)}",
         "=" * 50,
     ]
     logging.info("\n".join(log_lines))
 
 
 # --- HTTP/2 TCP stream reassembly and parsing ---
-def process_tcp_packet_http2(packet):
-    logging.debug(
-        f"[HTTP2] Called with src={src_ip}:{src_port}, dst={dst_ip}:{dst_port}, payload_len={len(payload)}"
-    )
-    if h2 is None:
-        logging.warning(
-            "[HTTP2] h2 library is not available, skipping HTTP/2 processing."
-        )
-        return
-    key = (src_ip, src_port, dst_ip, dst_port)
-    # Buffer the payload
-    buf = http2_stream_buffers.setdefault(key, bytearray())
-    buf.extend(payload)
-    logging.debug(f"[HTTP2] Buffer for key {key} now has {len(buf)} bytes.")
-    # Get or create H2Connection
-    conn = http2_connections.get(key)
-    if conn is None:
-        logging.debug(f"[HTTP2] Creating new H2Connection for key {key}.")
-        h2_config = H2Configuration(client_side = False)
-        conn = H2Connection(h2_config)
-        conn.initiate_connection()
-        http2_connections[key] = conn
-    else:
-        logging.debug(f"[HTTP2] Using existing H2Connection for key {key}.")
-    # Feed data to h2
-    try:
-        events = conn.receive_data(bytes(buf))
-        logging.debug(f"[HTTP2] Received {len(events)} events from h2 for key {key}.")
-        # Remove processed data from buffer
-        http2_stream_buffers[key] = bytearray()
-        for event in events:
-            logging.debug(f"[HTTP2] Event type: {type(event).__name__} for key {key}.")
-            if isinstance(event, h2.events.RequestReceived):
-                headers = {
-                    k.decode() if isinstance(k, bytes) else k: (
-                        v.decode() if isinstance(v, bytes) else v
-                    )
-                    for k, v in event.headers
-                }
-                path = headers.get(":path", "")
-                stream_id = event.stream_id
-                logging.debug(
-                    f"[HTTP2] RequestReceived: stream_id={stream_id}, path={path}, headers={headers}"
+def process_tcp_packet_http2(packet, _src_ip, _dst_ip, _src_port, _dst_port, _payload):
+    global http2_decoder
+    if http2_decoder is None:
+        http2_decoder = HTTP2Decoder()
+    results = http2_decoder.process_tcp_packet(packet)
+    if results:
+        for result in results:
+
+            def find_in_pairs(pairs, key, default=None):
+                """
+                Find the value in a list of (key, value) pairs by matching the first element.
+
+                Args:
+                    pairs (list of tuple): List of (key, value) pairs.
+                    key (str): The key to search for.
+
+                Returns:
+                    str or None: The value corresponding to the key, or None if not found.
+                """
+                for k, v in pairs:
+                    if k == key:
+                        return v
+                return default
+
+            method = find_in_pairs(result.get("client_headers", []), ":method")
+            path = find_in_pairs(result.get("client_headers", []), ":path")
+            status = find_in_pairs(result.get("server_headers", []), ":status")
+            if method and method not in HTTP_METHODS:
+                logging.warning(
+                    f"Unknown HTTP/2 method: {method} in packet {packet.summary()}"
                 )
-                # Store headers for this stream
-                conn.streams[stream_id].custom_headers = headers
-                conn.streams[stream_id].custom_path = path
-            elif isinstance(event, h2.events.DataReceived):
-                stream_id = event.stream_id
-                data = event.data
-                logging.debug(
-                    f"[HTTP2] DataReceived: stream_id={stream_id}, data_len={len(data)}"
-                )
-                # Retrieve headers and path
-                headers = getattr(conn.streams[stream_id], "custom_headers", {})
-                path = getattr(conn.streams[stream_id], "custom_path", "")
-                # Try to decode JSON payload
+            if path is None:
+                logging.warning(f"HTTP/2 packet missing path: {packet.summary()}")
+            if status is None:
+                logging.warning(f"HTTP/2 packet missing status: {packet.summary()}")
+
+            payload = {
+                "protocol": "HTTP/2",
+                "src_ip": result["src_ip"],
+                "dst_ip": result["dst_ip"],
+                "src_port": result["src_port"],
+                "dst_port": result["dst_port"],
+                "req_headers": result.get("client_headers"),
+                "resp_headers": result.get("server_headers"),
+                "resp_status": result.get("resp_status"),
+                "resp_reason": result.get("resp_reason"),
+                "request": result.get("client_data"),
+                "response": result.get("server_data"),
+                "method": method,
+                "path": path,
+                "additional_data": {
+                    "client_trailers": result.get("client_trailers"),
+                    "server_trailers": result.get("server_trailers"),
+                    "connection": result.get("connection", {}),
+                },
+            }
+            store_reconstructed_payload(**payload)
                 try:
                     payload_str = data.decode("utf-8", errors="replace")
                 except Exception:
@@ -616,7 +624,11 @@ def process_packet(packet) -> None:
                 process_tcp_packet_http2(
                     packet, src_ip, dst_ip, tcp_layer.sport, tcp_layer.dport, payload
                 )
-            except Exception:
+            except Exception as e:
+                logging.exception(f"Error processing packet as HTTP/2: {e}")
+                import traceback
+
+                logging.error(f"Exception traceback:\n{traceback.format_exc()}")
                 process_tcp_packet_http1(
                     packet, src_ip, dst_ip, tcp_layer.sport, tcp_layer.dport, payload
                 )
@@ -654,13 +666,13 @@ def process_pcap_file(pcap_file: str) -> None:
     try:
         logging.info(f"Processing: {os.path.basename(pcap_file)}")
         # Read and adjust packets (function manages global start time)
-        packets = read_and_adjust_pcap(pcap_file)
+        packets = rdpcap(pcap_file)
         processed_count = 0
         for packet in packets:
             process_packet(packet)
             processed_count += 1
             total_packets_count += 1
-        # Append packets to merged.pcap with adjusted times
+
         # wrpcap(PROCESSING_CONFIG["merged_pcap"], packets, append=True)
         logging.info(
             f"Processed {processed_count} packets from {os.path.basename(pcap_file)}, total packets processed: {total_packets_count}"
