@@ -3,17 +3,11 @@
 import os
 import logging
 import time
-import glob
-import signal
-import sys
 import shlex
 from typing import Dict, Set, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from scapy.all import rdpcap, IP, TCP, UDP, SCTP
 from scapy.layers.http import HTTP, HTTPRequest, HTTPResponse
-import subprocess
-import re
-import shlex
 import argparse
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -65,6 +59,7 @@ processed_files: Set[str] = set()
 first_capture_start_time = None
 # Global variable to store the total packet count
 total_packets_count = 0
+MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")
 
 # --- Global storage for reconstructed payloads ---
 # Each entry: {"to": dst_ip, "from": src_ip, "payload": ...}
@@ -73,10 +68,6 @@ reconstructed_payloads = []
 # --- TCP stream reassembly buffers ---
 # Key: (src_ip, src_port, dst_ip, dst_port), Value: bytearray
 http2_stream_buffers = {}
-
-# --- HTTP/2 connection state ---
-# Key: (src_ip, src_port, dst_ip, dst_port), Value: h2.connection.H2Connection
-http2_connections = {}
 
 # --- HTTP/1 outstanding requests for merging with responses ---
 http1_outstanding_requests = {}
@@ -94,16 +85,38 @@ HTTP_METHODS = [
     "HEAD",
 ]
 
-# --- Import h2 for HTTP/2 parsing ---
-try:
-    from h2.connection import H2Connection
-    from h2.config import H2Configuration
-    import h2.events
-    import h2
-except ImportError:
-    h2 = None
-    logging.warning("h2 library not found. HTTP/2 parsing will not work.")
+# MongoDB setup (singleton)
+def init_mongo_collection():
+    from pymongo import MongoClient
+    from pymongo.errors import CollectionInvalid
 
+    global mongo_collection
+    mongo_client = MongoClient(MONGO_URI)
+    mongo_db = mongo_client["integration-tests"]
+    # Ensure collection exists
+    try:
+        mongo_db.create_collection("packet_analysis")
+    except CollectionInvalid:
+        pass  # Collection already exists
+    mongo_collection = mongo_db["packet_analysis"]
+
+def get_mongo_collection():
+    global mongo_collection
+    if mongo_collection is None:
+        logging.error("MongoDB collection is not initialized. Call init_mongo_collection() first.")
+        return None
+    return mongo_collection
+
+def insert_packet_analysis(entry):
+    """Insert a packet analysis entry into MongoDB, with error handling."""
+    collection = get_mongo_collection()
+    if collection is not None:
+        try:
+            collection.insert_one(entry)
+        except Exception as e:
+            logging.error(f"Failed to insert packet analysis into MongoDB: {e}")
+    else:
+        logging.error("Packet analysis entry not inserted: MongoDB collection unavailable.")
 
 def parse_start_time_from_filename(filename):
     import re
@@ -336,8 +349,11 @@ def store_reconstructed_payload(
         "response": response,
         "method": method,
         "additional_data": additional_data,
+        "created_at": datetime.now(timezone.utc),
     }
     reconstructed_payloads.append(entry)
+    # Store in MongoDB using helper
+    insert_packet_analysis(entry)
     # Log the reconstructed payload in a readable format
     log_lines = [
         f"===== RECONSTRUCTED {protocol} PAYLOAD =====",
@@ -420,25 +436,6 @@ def process_tcp_packet_http2(packet, _src_ip, _dst_ip, _src_port, _dst_port, _pa
                 },
             }
             store_reconstructed_payload(**payload)
-                try:
-                    payload_str = data.decode("utf-8", errors="replace")
-                except Exception:
-                    payload_str = repr(data)
-                logging.debug(
-                    f"[HTTP2] Storing reconstructed payload for stream_id={stream_id}, path={path}"
-                )
-                store_reconstructed_payload(
-                    "HTTP/2",
-                    src_ip,
-                    dst_ip,
-                    src_port,
-                    dst_port,
-                    headers,
-                    path,
-                    payload_str,
-                )
-    except Exception as e:
-        logging.error(f"[HTTP2] HTTP/2 parsing error: {e}")
 
 
 # --- HTTP/1 parsing and merging ---
@@ -611,10 +608,9 @@ def process_packet(packet) -> None:
             process_tcp_packet_http2(
                 packet, src_ip, dst_ip, tcp_layer.sport, tcp_layer.dport, payload
             )
-        elif (
-            any(payload.startswith(method.encode() + b" ") for method in HTTP_METHODS)
-            or payload.startswith(b"HTTP/")
-        ):
+        elif any(
+            payload.startswith(method.encode() + b" ") for method in HTTP_METHODS
+        ) or payload.startswith(b"HTTP/"):
             process_tcp_packet_http1(
                 packet, src_ip, dst_ip, tcp_layer.sport, tcp_layer.dport, payload
             )
@@ -647,20 +643,6 @@ def process_packet(packet) -> None:
         result = analyze_tcp_packet(packet)
 
 
-def read_and_adjust_pcap(pcap_file: str) -> list:
-    """Read a pcap file and adjust packet times to be relative to the first capture start time (managed globally)."""
-    global first_capture_start_time
-    packets = rdpcap(pcap_file)
-    file_start_time = parse_start_time_from_filename(pcap_file)
-    logging.debug(f"PCAP file: {pcap_file}, parsed start time: {file_start_time}")
-    if first_capture_start_time is None:
-        first_capture_start_time = file_start_time
-    time_offset = file_start_time - first_capture_start_time
-    for packet in packets:
-        packet.time += time_offset
-    return packets
-
-
 def process_pcap_file(pcap_file: str) -> None:
     global total_packets_count
     try:
@@ -673,7 +655,6 @@ def process_pcap_file(pcap_file: str) -> None:
             processed_count += 1
             total_packets_count += 1
 
-        # wrpcap(PROCESSING_CONFIG["merged_pcap"], packets, append=True)
         logging.info(
             f"Processed {processed_count} packets from {os.path.basename(pcap_file)}, total packets processed: {total_packets_count}"
         )
@@ -867,13 +848,10 @@ def main():
     tshark_out_path = args.tshark_out
     if not os.path.exists(tshark_out_path):
         parser.error(f"Tshark output file does not exist: {tshark_out_path}")
+    init_mongo_collection()
     main_processing_loop_tshark_out(tshark_out_path)
     logging.info(f"Total packets processed: {total_packets_count}")
     logging.info("Exited")
-
-
-if __name__ == "__main__":
-    main()
 
 
 if __name__ == "__main__":

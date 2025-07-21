@@ -1,0 +1,19 @@
+[package]
+name = "integration-tests"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+publish.workspace = true
+readme.workspace = true
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+anyhow = "1.0"
+pcap = "2.2.0"
+
+[[bin]]
+name = "network_capture"
+path = "src/network_capture.rs"
