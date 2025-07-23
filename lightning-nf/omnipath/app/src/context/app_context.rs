@@ -68,6 +68,22 @@ impl Configuration {
 		configuration
 	}
 
+	/// Builds a list of NF service definitions from the provided configuration.
+	///
+	/// For each service name in the configuration, constructs an `NfService1` instance with appropriate IP endpoint (IPv4 or IPv6), transport protocol, API prefix, version information, and status set to registered.
+	///
+	/// # Parameters
+	/// - `config`: The validated OmniPath configuration from which to build the NF services.
+	///
+	/// # Returns
+	/// A vector of `NfService1` instances, each representing a configured network function service.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// let services = Configuration::build_nf_services(&validated_config);
+	/// assert!(!services.is_empty());
+	/// ```
 	pub fn build_nf_services(config: &SerdeValidated<OmniPathConfig>) -> Vec<NfService1> {
 		let config = config.inner();
 		let api_prefix = Some(config.sbi.get_ip_uri());

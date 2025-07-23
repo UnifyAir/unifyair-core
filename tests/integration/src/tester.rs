@@ -80,7 +80,19 @@ pub struct PacketFlow {
     pub timestamp: u64,
 }
 
-/// Maps IP addresses to their corresponding network function names
+/// Returns the 5G network function or RAN name corresponding to the given IP address.
+///
+/// If the IP address does not match any known network function or RAN, returns "UNKNOWN".
+///
+/// # Examples
+///
+/// ```
+/// let name = get_nf_name_by_ip("10.0.0.1");
+/// assert_eq!(name, "AMF");
+///
+/// let unknown = get_nf_name_by_ip("192.168.1.1");
+/// assert_eq!(unknown, "UNKNOWN");
+/// ```
 pub fn get_nf_name_by_ip(ip: &str) -> &'static str {
     match ip {
         AMF_IP => "AMF",
@@ -119,7 +131,20 @@ pub fn get_nf_name_by_ip(ip: &str) -> &'static str {
     }
 }
 
-/// Parse IP header from packet data
+/// Parses an IPv4 header from raw packet data.
+///
+/// Returns `Ok(Some(IpHeader))` if the data contains a valid IPv4 header, or `Ok(None)` if the data is insufficient or not IPv4.
+///
+/// # Examples
+///
+/// ```
+/// let packet_data = [
+///     0x45, 0x00, 0x00, 0x54, 0x00, 0x00, 0x40, 0x00,
+///     0x40, 0x01, 0xf7, 0xb5, 192, 168, 1, 1, 192, 168, 1, 2
+/// ];
+/// let header = parse_ip_header(&packet_data).unwrap();
+/// assert!(header.is_some());
+/// ```
 pub fn parse_ip_header(packet_data: &[u8]) -> Result<Option<IpHeader>> {
     if packet_data.len() < 20 {
         return Ok(None); // Not enough data for IP header
@@ -175,7 +200,14 @@ pub fn parse_ip_header(packet_data: &[u8]) -> Result<Option<IpHeader>> {
     }))
 }
 
-/// Check if an IP address is a known network function
+/// Returns `true` if the given IP address matches any known 5G network function or RAN IP.
+///
+/// # Examples
+///
+/// ```
+/// assert!(is_known_nf_ip("10.0.0.1")); // Assuming 10.0.0.1 is a known NF IP
+/// assert!(!is_known_nf_ip("192.168.1.100"));
+/// ```
 pub fn is_known_nf_ip(ip: &str) -> bool {
     matches!(ip, 
         AMF_IP | SMF_IP | UPF_IP | NRF_IP | AUSF_IP | PCF_IP | NSSF_IP | UDM_IP | UDR_IP |
@@ -185,7 +217,18 @@ pub fn is_known_nf_ip(ip: &str) -> bool {
     )
 }
 
-/// Get protocol name from protocol number
+/// Returns the protocol name corresponding to a given protocol number.
+///
+/// Recognizes common protocol numbers such as ICMP, TCP, UDP, OSPF, and SCTP. Returns "UNKNOWN" for unrecognized protocol numbers.
+///
+/// # Examples
+///
+/// ```
+/// let name = get_protocol_name(6);
+/// assert_eq!(name, "TCP");
+/// let unknown = get_protocol_name(255);
+/// assert_eq!(unknown, "UNKNOWN");
+/// ```
 pub fn get_protocol_name(protocol: u8) -> &'static str {
     match protocol {
         1 => "ICMP",
@@ -197,7 +240,18 @@ pub fn get_protocol_name(protocol: u8) -> &'static str {
     }
 }
 
-/// Analyze packet and create packet flow information
+/// Analyzes a captured packet and extracts flow information if it involves a known 5G network function.
+///
+/// Attempts to parse the IPv4 header from the packet data. If either the source or destination IP matches a known network function, returns a `PacketFlow` containing source and destination IPs and names, protocol, packet length, and timestamp in microseconds. Returns `None` if the packet does not involve a known network function or cannot be parsed.
+///
+/// # Examples
+///
+/// ```
+/// let flow = analyze_packet(&packet)?;
+/// if let Some(flow) = flow {
+///     println!("{} -> {}", flow.source_name, flow.destination_name);
+/// }
+/// ```
 pub fn analyze_packet(packet: &Packet) -> Result<Option<PacketFlow>> {
     let packet_data = packet.data;
     
@@ -228,7 +282,23 @@ pub fn analyze_packet(packet: &Packet) -> Result<Option<PacketFlow>> {
     Ok(None)
 }
 
-/// Print packet flow with arrow notation
+/// Prints a formatted summary of a packet flow, including packet number, source and destination names and IPs, protocol, length, and timestamp.
+///
+/// # Examples
+///
+/// ```
+/// let flow = PacketFlow {
+///     source_ip: "10.0.0.1".to_string(),
+///     destination_ip: "10.0.0.2".to_string(),
+///     source_name: "AMF".to_string(),
+///     destination_name: "SMF".to_string(),
+///     protocol: 17,
+///     length: 128,
+///     timestamp: 1_650_000,
+/// };
+/// print_packet_flow(&flow, 1);
+/// // Output: 📦 Packet #1 | AMF:10.0.0.1 → SMF:10.0.0.2 | UDP | 128 bytes | 1s.650000μs
+/// ```
 pub fn print_packet_flow(flow: &PacketFlow, packet_number: usize) {
     let protocol_name = get_protocol_name(flow.protocol);
     let timestamp_sec = flow.timestamp / 1000000;
@@ -247,7 +317,16 @@ pub fn print_packet_flow(flow: &PacketFlow, packet_number: usize) {
     );
 }
 
-/// Process and filter packets based on source and destination
+/// Captures and analyzes packets for a specified duration, filtering for traffic between known 5G network functions.
+///
+/// Only packets involving known network function IPs are processed and displayed. Prints detailed flow information for each filtered packet and summarizes statistics, including total and filtered packet counts, filter rate, and the most frequent network function flows.
+///
+/// # Examples
+///
+/// ```
+/// let mut capture = pcap::Capture::from_device("eth0")?.open()?;
+/// process_filtered_packets(&mut capture, std::time::Duration::from_secs(10))?;
+/// ```
 pub fn process_filtered_packets(capture: &mut pcap::Capture<pcap::Active>, duration: std::time::Duration) -> Result<()> {
     println!("🔍 Starting filtered packet analysis...");
     println!("📡 Monitoring traffic between 5G Network Functions...");
@@ -306,7 +385,25 @@ pub fn process_filtered_packets(capture: &mut pcap::Capture<pcap::Active>, durat
     Ok(())
 }
 
-/// Filter packets by specific source and destination IPs
+/// Captures and filters packets by optional source and destination IP addresses for a specified duration.
+///
+/// Only packets matching the provided source and/or destination IPs are printed, along with summary statistics at the end. If either IP is `None`, that criterion is ignored.
+///
+/// # Parameters
+/// - `source_ip`: Optional source IP address to filter by. If `None`, all source IPs are accepted.
+/// - `destination_ip`: Optional destination IP address to filter by. If `None`, all destination IPs are accepted.
+/// - `duration`: The time period to capture and filter packets.
+///
+/// # Returns
+/// Returns `Ok(())` when filtering completes successfully, or an error if packet capture fails.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+/// let mut capture = pcap::Capture::from_device("eth0")?.open()?;
+/// filter_packets_by_ips(&mut capture, Some("10.0.0.1"), None, Duration::from_secs(10))?;
+/// ```
 pub fn filter_packets_by_ips(capture: &mut pcap::Capture<pcap::Active>, 
                            source_ip: Option<&str>, 
                            destination_ip: Option<&str>,
@@ -358,13 +455,33 @@ pub fn filter_packets_by_ips(capture: &mut pcap::Capture<pcap::Active>,
     Ok(())
 }
 
-/// Example function to demonstrate filtering between specific network functions
+/// Filters and displays packets sent from the AMF to the SMF network function over a specified duration.
+///
+/// This function demonstrates how to filter captured packets where the source IP is the AMF and the destination IP is the SMF, printing matching packet flows and summary statistics.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+/// let mut capture = pcap::Capture::from_device("eth0").unwrap().open().unwrap();
+/// example_filter_amf_to_smf(&mut capture, Duration::from_secs(10)).unwrap();
+/// ```
 pub fn example_filter_amf_to_smf(capture: &mut pcap::Capture<pcap::Active>, duration: std::time::Duration) -> Result<()> {
     println!("🎯 Example: Filtering packets from AMF to SMF...");
     filter_packets_by_ips(capture, Some(AMF_IP), Some(SMF_IP), duration)
 }
 
-/// Example function to demonstrate filtering all traffic from RAN
+/// Captures and prints all network traffic involving any RAN IP within a specified duration.
+///
+/// Filters packets in real time, displaying flows where either the source or destination IP matches any of the RAN simulator IPs (RAN1, RAN2, or RAN3). Prints a summary of total and filtered packet counts after the capture session.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+/// let mut capture = pcap::Capture::from_device("eth0").unwrap().open().unwrap();
+/// example_filter_ran_traffic(&mut capture, Duration::from_secs(10)).unwrap();
+/// ```
 pub fn example_filter_ran_traffic(capture: &mut pcap::Capture<pcap::Active>, duration: std::time::Duration) -> Result<()> {
     println!("🎯 Example: Filtering all RAN traffic...");
     

@@ -203,6 +203,21 @@ impl NfConfig for OmniPathConfig {
 }
 
 impl Sbi {
+	/// Returns the full URI for the service-based interface using the configured scheme, register IP address, and port.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// let sbi = Sbi {
+	///     scheme: Scheme::Http,
+	///     register_ip: "127.0.0.1".parse().unwrap(),
+	///     binding_ip: "127.0.0.1".parse().unwrap(),
+	///     port: 8080,
+	///     tls: None,
+	///     service_name_list: vec![ServiceName::NamfComm],
+	/// };
+	/// assert_eq!(sbi.get_ip_uri(), "http://127.0.0.1:8080");
+	/// ```
 	pub fn get_ip_uri(&self) -> String {
 		format!(
 			"{}://{}:{}",
@@ -223,6 +238,10 @@ fn display_slice<T: ToString>(input: &[T]) -> String {
 
 pub struct SerdeValidated<T>(T);
 impl<T: Validate> SerdeValidated<T> {
+	/// Creates a new `SerdeValidated` instance by validating the provided value.
+	///
+	/// Returns an error if the value fails validation.
+	#[example]
 	pub fn new(value: T) -> Result<Self, serde_valid::validation::Errors> {
 		value.validate()?;
 		Ok(SerdeValidated(value))
@@ -232,14 +251,29 @@ impl<T: Validate> SerdeValidated<T> {
 		&self.0
 	}
 
+	/// Consumes the wrapper and returns the inner validated value.
 	pub fn into_inner(self) -> T {
 		self.0
 	}
 }
 
-/// Helper function to resolve a string to IpAddr
-/// If the string is a valid IP address, it parses it directly
-/// Otherwise, it performs a DNS lookup to resolve the hostname
+/// Resolves a string to an `IpAddr`, accepting either an IP address or a hostname.
+///
+/// Attempts to parse the input string as an IP address. If parsing fails, performs a DNS lookup on the hostname and returns the first resolved IP address.
+///
+/// # Errors
+///
+/// Returns an error if the string cannot be parsed as an IP address and DNS resolution fails.
+///
+/// # Examples
+///
+/// ```
+/// let ip = resolve_ip_or_hostname("127.0.0.1").unwrap();
+/// assert_eq!(ip, std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)));
+///
+/// let ip = resolve_ip_or_hostname("localhost").unwrap();
+/// assert!(matches!(ip, std::net::IpAddr::V4(_)));
+/// ```
 fn resolve_ip_or_hostname(s: &str) -> Result<IpAddr, Box<dyn std::error::Error + Send + Sync>> {
 
 	info!("Resolving Address: {s}");
@@ -261,8 +295,25 @@ fn resolve_ip_or_hostname(s: &str) -> Result<IpAddr, Box<dyn std::error::Error +
 	}
 }
 
-/// Custom deserializer for IpAddr that can handle both IP addresses and
-/// hostnames
+/// Deserializes a string into an `IpAddr`, accepting either an IP address or a hostname.
+///
+/// Attempts to parse the input as an IP address; if parsing fails, resolves the string as a hostname via DNS lookup.
+/// Returns the first resolved IP address or an error if resolution is unsuccessful. Intended for use with Serde custom deserialization.
+///
+/// # Examples
+///
+/// ```
+/// use serde::Deserialize;
+/// use std::net::IpAddr;
+///
+/// #[derive(Deserialize)]
+/// struct Example {
+///     #[serde(deserialize_with = "deserialize_ip_addr")]
+///     ip: IpAddr,
+/// }
+///
+/// // Accepts both "192.168.1.1" and "localhost" as valid inputs.
+/// ```
 fn deserialize_ip_addr<'de, D>(deserializer: D) -> Result<IpAddr, D::Error>
 where
 	D: serde::Deserializer<'de>,
@@ -272,8 +323,28 @@ where
 	resolve_ip_or_hostname(&string).map_err(serde::de::Error::custom)
 }
 
-/// Custom deserializer for Vec<IpAddr> that can handle both IP addresses and
-/// hostnames
+/// Deserializes a list of strings into a vector of `IpAddr`, resolving each entry as either an IP address or a hostname.
+///
+/// Each string in the input list is parsed as an IP address; if parsing fails, it is resolved as a hostname via DNS lookup. Returns a vector of resolved `IpAddr` values.
+///
+/// # Examples
+///
+/// ```
+/// use serde::Deserialize;
+/// use std::net::IpAddr;
+///
+/// #[derive(Deserialize)]
+/// struct Config {
+///     #[serde(deserialize_with = "deserialize_ip_list")]
+///     addrs: Vec<IpAddr>,
+/// }
+///
+/// let toml = r#"
+/// addrs = ["127.0.0.1", "localhost"]
+/// "#;
+/// let config: Config = toml::from_str(toml).unwrap();
+/// assert!(!config.addrs.is_empty());
+/// ```
 fn deserialize_ip_list<'de, D>(deserializer: D) -> Result<Vec<IpAddr>, D::Error>
 where
 	D: serde::Deserializer<'de>,

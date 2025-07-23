@@ -8,6 +8,22 @@ use tracing::trace;
 use crate::{context::app_context::AppContext, builder::sbi::ModelBuildError};
 
 impl AppContext {
+	/// Builds a network function (NF) profile for the AMF based on the current application configuration.
+	///
+	/// Constructs an `NfProfile1` object by gathering configuration data, including AMF information, PLMN list, supported TAIs, and network services.
+	/// The method sets the appropriate IP address (IPv4 or IPv6) in the profile according to the SBI configuration.
+	/// Returns the completed and validated NF profile, or a `ModelBuildError` if validation fails.
+	///
+	/// # Returns
+	/// A `Result` containing the constructed `NfProfile1` on success, or a `ModelBuildError` if the profile could not be built or validated.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// let ctx = AppContext::new();
+	/// let profile = ctx.build_nf_profile().unwrap();
+	/// assert_eq!(profile.nf_type, NfType::Amf);
+	/// ```
 	pub fn build_nf_profile(&self) -> Result<NfProfile1, ModelBuildError> {
 		let config = self.get_config();
 		let sbi = self.get_sbi_config();
