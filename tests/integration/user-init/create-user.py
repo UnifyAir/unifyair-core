@@ -26,18 +26,18 @@ logger = logging.getLogger(__name__)
 
 def get_token(username: str, password: str, api_url: str) -> str:
     """
-    Authenticates with the user-init API and returns a JWT token.
-
-    Args:
-        username (str): The username to authenticate with.
-        password (str): The password to authenticate with.
-        api_url (str): The full URL to the login endpoint.
-
+    Authenticate with the API using the provided credentials and return a JWT token.
+    
+    Parameters:
+        username (str): Username for authentication.
+        password (str): Password for authentication.
+        api_url (str): URL of the login API endpoint.
+    
     Returns:
-        str: The JWT token if authentication is successful.
-
+        str: JWT token obtained upon successful authentication.
+    
     Raises:
-        Exception: If authentication fails or token is not found.
+        Exception: If authentication fails or the token is missing from the response.
     """
     headers = {
         'Accept': 'application/json, text/plain, */*',
@@ -68,13 +68,15 @@ def get_token(username: str, password: str, api_url: str) -> str:
 
 def create_subscriber(token: str, subscriber_data: dict, api_url: str) -> requests.Response:
     """
-    Creates a subscriber using the provided token and subscriber data.
-    Args:
-        token (str): JWT token for authentication.
-        subscriber_data (dict): The subscriber JSON data.
-        api_url (str): The full URL to the subscriber creation endpoint.
+    Send a POST request to create a subscriber using the specified API URL and authentication token.
+    
+    Parameters:
+        token (str): JWT token used for API authentication.
+        subscriber_data (dict): Dictionary containing subscriber details to be sent as JSON.
+        api_url (str): Endpoint URL for subscriber creation.
+    
     Returns:
-        requests.Response: The response object from the API call.
+        requests.Response: The HTTP response object from the API.
     """
     headers = {
         'Accept': 'application/json, text/plain, */*',
@@ -94,11 +96,9 @@ def create_subscriber(token: str, subscriber_data: dict, api_url: str) -> reques
 
 def create_subscribers_from_yaml(token: str, config: dict, api_url_template: str):
     """
-    Loads subscribers from a YAML file and creates them via the API.
-    Args:
-        token (str): JWT token for authentication.
-        yaml_path (str): Path to the YAML file with subscribers.
-        api_url_template (str): Template for the subscriber API endpoint, e.g. 'http://0.0.0.0:5001/api/subscriber/{ueId}/{plmnID}'
+    Creates subscriber entries via the API for each user defined in the provided configuration dictionary.
+    
+    Iterates over the list of users in the config, formatting the API URL for each using their `ueId` and `plmnID`. Skips users missing required identifiers and logs a warning. Calls the subscriber creation API for each valid user and logs the result.
     """
     users = config.get('users', [])
     for user in users:
@@ -116,6 +116,15 @@ def create_subscribers_from_yaml(token: str, config: dict, api_url_template: str
 
 
 def load_config(yaml_path: str):
+    """
+    Load and parse a YAML configuration file from the specified path.
+    
+    Parameters:
+        yaml_path (str): Path to the YAML file to be loaded.
+    
+    Returns:
+        dict: Parsed contents of the YAML file as a Python dictionary.
+    """
     with open(yaml_path, 'r') as f:
         return yaml.safe_load(f)
 

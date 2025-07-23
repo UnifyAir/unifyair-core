@@ -122,6 +122,24 @@ impl NfInstance for OmniPathApp {
 	type Config = OmniPathConfig;
 	type Error = OmniPathError;
 
+	/// Initializes the OmniPathApp with the provided configuration and shutdown token.
+	///
+	/// Parses and validates the NRF URI, creates the NRF client, validates the configuration,
+	/// initializes the application and NGAP contexts, and sets the global application context.
+	/// Returns an initialized OmniPathApp instance on success.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the NRF URI is invalid, the configuration is invalid, the HTTP client cannot be built,
+	/// the NGAP network cannot be created, or the global application context cannot be set.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// let config = OmniPathConfig::default();
+	/// let shutdown = CancellationToken::new();
+	/// let app = OmniPathApp::initialize(config, shutdown)?;
+	/// ```
 	fn initialize(
 		config: Self::Config,
 		shutdown: CancellationToken,

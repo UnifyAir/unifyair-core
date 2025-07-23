@@ -55,17 +55,16 @@ impl NgapContext {
 		Ok(())
 	}
 
-	/// Initiates NGAP processing for a new TNLA (Transport Network Layer
-	/// Association) connection.
+	/// Starts NGAP processing for a new TNLA connection.
 	///
-	/// This function performs the following steps:
-	/// 1. Attempts to establish an NG setup connection with retries
-	/// 2. Creates and stores a new gNB context if setup is successful
-	/// 3. Spawns a new task to handle ongoing NGAP message processing
+	/// Attempts NG setup with retries, registers the resulting gNB context, and spawns a task to handle ongoing NGAP message processing for the connection. If setup fails after all retries, the function returns early without spawning the processing loop.
 	///
-	/// # Arguments
-	/// * `self` - Arc reference to NgapContext
-	/// * `tnla` - Arc reference to the TNLA connection
+	/// # Examples
+	///
+	/// ```
+	/// // Assume `ngap_context` and `tnla` are Arc-wrapped and properly initialized.
+	/// ngap_context.clone().start_ngap_processing(tnla.clone()).await;
+	/// ```
 	pub async fn start_ngap_processing(
 		self: Arc<Self>,
 		tnla: Arc<TnlaAssociation>,
@@ -226,31 +225,21 @@ impl NgapContext {
 		result
 	}
 
-	/// Runs the main NGAP (NG Application Protocol) processing loop for a
-	/// specific gNB (gNodeB) connection.
+	/// Processes incoming NGAP messages for a connected gNB in a continuous loop.
 	///
-	/// This function handles the continuous processing of NGAP messages from a
-	/// connected gNB by:
-	/// 1. Reading incoming NGAP messages from the TNLA (Transport Network Layer
-	///    Association)
-	/// 2. Spawning a new task for each message to handle processing
-	///    asynchronously
-	/// 3. Decoding the NGAP PDU (Protocol Data Unit)
-	/// 4. Routing the message to appropriate handlers and getting a response
-	/// 5. Encoding and sending back any response messages
-	///
-	/// # Arguments
-	/// * `self` - Arc reference to NgapContext for shared access
-	/// * `gnb_context` - Arc reference to the GnbContext containing the gNB
-	///   connection state
+	/// Continuously reads NGAP messages from the TNLA association for the specified gNB context. Each received message is handled asynchronously in its own task, where it is decoded, routed, and any response is encoded and sent back. The loop exits when the TNLA connection is closed or a read error occurs.
 	///
 	/// # Returns
-	/// * `Result<(), NetworkError>` - Ok(()) if loop terminates normally, or
-	///   NetworkError on failure
 	///
-	/// The function continues running until the TNLA connection is closed or
-	/// encounters an error. Each message is processed in its own task to allow
-	/// concurrent handling of multiple messages.
+	/// `Ok(())` if the TNLA connection is closed gracefully, or a `NetworkError` if a read failure occurs.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// // Assume `ngap_context` and `gnb_context` are properly initialized Arcs.
+	/// let result = ngap_context.clone().run_ngap_loop(gnb_context.clone()).await;
+	/// assert!(result.is_ok() || matches!(result, Err(NetworkError::TnlaReadError(_, _))));
+	/// ```
 	pub async fn run_ngap_loop(
 		self: Arc<Self>,
 		gnb_context: Arc<GnbContext>,
@@ -309,6 +298,17 @@ impl NgapContext {
 	//   - Avoiding race conditions between UE removal and task cancellation
 	//   - Handling in-flight messages and resource cleanup
 	// Consider using a broadcast channel or cancellation token per UE, and a coordinated shutdown procedure for robust cleanup.
+	/// Closes and removes a gNB (RAN node) connection from the context.
+	///
+	/// Logs the closure of the specified gNB connection and asynchronously removes its context from the internal map.
+	/// Intended as the entry point for future coordinated teardown of RAN connections and associated resources.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// // Assume `ngap_context` is an Arc<NgapContext> and `gnb_context` is an Arc<GnbContext>
+	/// ngap_context.close_ran_connection(gnb_context).await;
+	/// ```
 	pub async fn close_ran_connection(&self, gnb_context: Arc<GnbContext>) {
 		let ran_node_id = gnb_context.global_ran_node_id.clone();
 		info!("Ran Connection Closed: {:?}", ran_node_id);

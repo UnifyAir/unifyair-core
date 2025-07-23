@@ -16,6 +16,16 @@ pub const OMNIPATH_STR: &'static str = "omnipath";
 pub struct App;
 
 impl App {
+	/// Starts the specified network function application using the provided configuration file.
+	///
+	/// Currently, only the "omnipath" application is supported. This function initializes and runs the corresponding NF instance with the given configuration path.
+	///
+	/// # Parameters
+	/// - `app_name`: The name of the application to start. Must be "omnipath".
+	/// - `config_path`: Path to the configuration file for the application.
+	///
+	/// # Returns
+	/// Returns `Ok(())` if the application starts and runs successfully, or an error if initialization or execution fails.
 	pub fn start_app(
 		app_name: &str,
 		config_path: &str,
@@ -26,6 +36,22 @@ impl App {
 		}
 	}
 
+	/// Runs a network function application with the specified configuration.
+	///
+	/// Initializes tracing, loads the configuration, sets up logging and the Tokio runtime,
+	/// and executes the network function instance asynchronously. Propagates any errors encountered during setup or execution.
+	///
+	/// # Type Parameters
+	///
+	/// * `T`: The network function instance type to run, which must implement `NfInstance`.
+	///
+	/// # Arguments
+	///
+	/// * `config_path`: Path to the configuration file for the network function.
+	///
+	/// # Returns
+	///
+	/// Returns `Ok(())` if the application runs successfully, or an error if setup or execution fails.
 	fn run<T: NfInstance>(config_path: &str) -> color_eyre::Result<()> {
 		install_tracing();
 		let nf_app: NfApp<T> = NfApp::new(config_path)?;
@@ -112,6 +138,23 @@ impl<T: NfInstance> NfApp<T> {
 		})
 	}
 
+	/// Runs the network function (NF) application, handling initialization, signal-based shutdown, and the full NF lifecycle.
+	///
+	/// This method sets up signal handlers for SIGTERM and SIGINT to enable graceful shutdown. It initializes the NF instance, registers it, starts its main execution, and ensures proper deregistration on shutdown or error. Errors during initialization, runtime, or deregistration are mapped to the appropriate `NfError` variants.
+	///
+	/// # Returns
+	/// Returns `Ok(())` if the NF completes and deregisters successfully, or an `NfError` if any stage fails.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// # use your_crate::{NfApp, MyNfInstance};
+	/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+	/// let app = NfApp::<MyNfInstance>::new("config.yaml")?;
+	/// app.run().await?;
+	/// # Ok(())
+	/// # }
+	/// ```
 	pub async fn run(self) -> Result<(), NfError<T::Error>> {
 		let shutdown_token = self.cancellation_token.clone();
 		let handle = tokio::spawn(async move {
@@ -159,6 +202,21 @@ impl<T: NfInstance> NfApp<T> {
 	}
 }
 
+/// Placeholder for logging setup; currently performs no actions and always succeeds.
+///
+/// This function is intended to configure logging based on the provided configuration,
+/// but is currently a no-op.
+///
+/// # Returns
+///
+/// Always returns `Ok(())`.
+///
+/// # Examples
+///
+/// ```
+/// let config = LoggingConfig::default();
+/// assert!(setup_logging(&config).is_ok());
+/// ```
 fn setup_logging(_config: &LoggingConfig) -> Result<(), AppSetupError> {
 	Ok(())
 }

@@ -46,7 +46,11 @@ pub const RAN3_IP: &str = "10.0.1.2"; // Ran3
 // MongoDB
 pub const MONGO_IP: &str = "10.0.100.0"; // MongoDB
 
-#[tokio::main]
+/// Orchestrates the integration test by setting up Docker Compose services, capturing network packets, and analyzing them.
+///
+/// This asynchronous entry point ensures a clean Docker environment, launches 5G network function simulators using Docker Compose,
+/// waits for the Docker bridge interface, captures all network packets on that interface, and processes them for 30 seconds.
+/// Returns an error if any setup step fails or if the required Docker Compose file is missing.
 async fn main() -> Result<()> {
 	let compose_file = "docker-compose.yaml";
 
@@ -74,6 +78,15 @@ async fn main() -> Result<()> {
 	Ok(())
 }
 
+/// Cleans up Docker containers and networks to prepare for a fresh test environment.
+///
+/// Stops and removes existing Docker Compose containers and orphaned services, deletes the `omnipath_nf-network` network if present, prunes unused Docker networks, and removes any Docker networks whose names contain "bridge" or "nf-network" to prevent IP conflicts.
+///
+/// # Examples
+///
+/// ```
+/// cleanup_docker_resources()?;
+/// ```
 fn cleanup_docker_resources() -> Result<()> {
 	// Stop and remove any existing containers
 	let _ = Command::new("docker-compose")
@@ -110,6 +123,9 @@ fn cleanup_docker_resources() -> Result<()> {
 	Ok(())
 }
 
+/// Starts Docker Compose services synchronously in the current directory.
+///
+/// Runs `docker compose up --build` and waits for completion. Returns an error if the command fails.
 fn start_docker_compose() -> Result<()> {
 	// Run docker compose up
 	let output = Command::new("docker")
@@ -130,6 +146,22 @@ fn start_docker_compose() -> Result<()> {
 	Ok(())
 }
 
+/// Starts Docker Compose services asynchronously in the background.
+///
+/// Spawns a background task to run `docker-compose up --build` in the current directory.
+/// Returns immediately after starting the task, without waiting for the services to finish starting.
+///
+/// # Returns
+///
+/// Returns `Ok(())` if the background task was spawned successfully.
+///
+/// # Examples
+///
+/// ```
+/// tokio::runtime::Runtime::new().unwrap().block_on(async {
+///     start_docker_compose_background().unwrap();
+/// });
+/// ```
 async fn start_docker_compose_background() -> Result<()> {
 	// Spawn docker-compose up in background using tokio
 	tokio::spawn(async move {
@@ -158,6 +190,27 @@ async fn start_docker_compose_background() -> Result<()> {
 	Ok(())
 }
 
+/// Starts a packet capture session on the Docker bridge network interface.
+///
+/// Waits for up to 30 seconds for a network device with a name starting with "br-" (the Docker bridge)
+/// to appear, then opens a promiscuous capture on that device with a 65,535-byte snap length and a 1-second timeout.
+/// Captures all packets by applying an empty filter.
+///
+/// # Returns
+/// A `Capture<Active>` handle for the bridge device if successful.
+///
+/// # Errors
+/// Returns an error if the bridge device is not found within the timeout or if packet capture setup fails.
+///
+/// # Examples
+///
+/// ```
+/// let capture = tokio::runtime::Runtime::new()
+///     .unwrap()
+///     .block_on(start_packet_capture())
+///     .expect("Failed to start packet capture");
+/// assert!(capture.get_selectable_fd().is_some());
+/// ```
 async fn start_packet_capture() -> Result<Capture<Active>> {
 	// Wait for bridge to be created by Docker Compose
 	let mut attempts = 0;

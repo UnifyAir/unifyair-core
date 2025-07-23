@@ -18,14 +18,18 @@ class HTTP2Decoder:
     def __init__(self):
         # Key: (canonical_src_ip, canonical_dst_ip, canonical_src_port, canonical_dst_port)
         # Value: HTTP2Connection object
+        """
+        Initialize the HTTP2Decoder with empty connection tracking, HTTP/2 preface bytes, and a packet counter.
+        """
         self.connections = {}
         self.http2_preface = b'PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n'
         self.total_packets_processed = 0 # Counter for logging/debugging
 
     def process_pcap(self, pcap_file):
         """
-        Processes a PCAP file packet by packet, extracts TCP packets with PSH flag,
-        and attempts to reconstruct HTTP/2 sessions incrementally.
+        Process a PCAP file to reconstruct HTTP/2 sessions by extracting and decoding relevant TCP packets.
+        
+        Iterates through packets in the provided PCAP file, identifies TCP packets with the PSH flag, and incrementally reconstructs HTTP/2 connections and streams. Completed HTTP/2 streams are detected and their details are logged.
         """
         logger.info(f"Loading and processing packets from {pcap_file}...")
         packets = rdpcap(pcap_file)
@@ -68,9 +72,12 @@ class HTTP2Decoder:
 
     def process_tcp_packet(self, packet):
         """
-        Processes a single TCP packet, identifies its direction within an HTTP/2 connection,
-        adds its payload to the appropriate buffer, and attempts to parse HTTP/2 frames.
-        Returns a list of dicts with request/response data for all streams that ended due to this packet.
+        Process a single TCP packet, updating the corresponding HTTP/2 connection and attempting to parse any new HTTP/2 frames.
+        
+        Determines the direction of the packet within the connection, appends its payload to the appropriate client or server buffer, and parses HTTP/2 frames from the updated buffer. If the HTTP/2 client preface is detected in a new connection, initializes connection state and begins parsing. Returns a list of dictionaries representing all HTTP/2 streams that were completed as a result of processing this packet.
+        
+        Returns:
+            List[dict]: A list of dictionaries containing request and response data for each stream that ended due to this packet.
         """
         ip_layer = packet[IP]
         tcp_layer = packet[TCP]
@@ -122,8 +129,10 @@ class HTTP2Decoder:
 
     def _collect_and_remove_completed_streams(self, connection):
         """
-        Helper to collect all completed streams, remove them from the connection,
-        and return their data as a list of dicts. Keeps track of ended stream IDs.
+        Collects all streams in the connection that are complete on both client and server sides, removes them from active tracking, and returns their data as a list of dictionaries.
+        
+        Returns:
+            List[dict]: A list of dictionaries representing completed HTTP/2 streams.
         """
         completed = []
         to_remove = []
@@ -138,7 +147,10 @@ class HTTP2Decoder:
 
     def _stream_to_dict(self, connection, stream):
         """
-        Helper to convert a completed stream to a dict with request and response data.
+        Convert a completed HTTP/2 stream into a dictionary containing request and response metadata.
+        
+        Returns:
+            dict: A dictionary with stream ID, client/server addresses, headers, data, trailers, completion flags, and a snapshot of connection settings.
         """
         src_ip, src_port = connection.client_addr
         dst_ip, dst_port = connection.server_addr
@@ -167,8 +179,13 @@ class HTTP2Decoder:
 
     def parse_http2_frames_from_buffer(self, connection, from_client):
         """
-        Attempts to parse HTTP/2 frames from a connection's buffer (client_buffer or server_buffer).
-        Consumes successfully parsed data from the buffer.
+        Parses HTTP/2 frames from the specified connection buffer, dispatching each frame to the appropriate handler and consuming parsed bytes.
+        
+        Parameters:
+            connection: The HTTP2Connection whose buffer is being parsed.
+            from_client (bool): If True, parses the client buffer; otherwise, parses the server buffer.
+        
+        This method processes as many complete HTTP/2 frames as possible from the buffer, handling both stream-specific and connection-level frames. It updates the buffer to remove parsed data and attempts error recovery if frame parsing fails.
         """
         current_buffer = connection.client_buffer if from_client else connection.server_buffer
         
@@ -227,7 +244,20 @@ class HTTP2Decoder:
 
 
     def _create_hyperframe_object(self, frame_type, flags, stream_id, body):
-        """Helper to create the correct hyperframe object based on type."""
+        """
+        Create and return a hyperframe object corresponding to the given HTTP/2 frame type.
+        
+        If the frame type is recognized, returns an instance of the appropriate hyperframe frame class with the specified flags, stream ID, and body. For unsupported frame types, returns a generic frame object with the provided attributes. Returns None if frame creation fails due to an exception.
+        
+        Parameters:
+            frame_type (int): The HTTP/2 frame type code.
+            flags (int): The frame flags.
+            stream_id (int): The stream identifier.
+            body (bytes): The frame payload.
+        
+        Returns:
+            An instance of the appropriate hyperframe frame class, a generic frame object for unsupported types, or None if creation fails.
+        """
         try:
             if frame_type == 0x0:  # DATA
                 frame = DataFrame(stream_id=stream_id)
@@ -252,6 +282,15 @@ class HTTP2Decoder:
                 # Return a generic frame for unsupported types to allow continuation
                 class GenericFrame:
                     def __init__(self, frame_type, flags, stream_id, body):
+                        """
+                        Initialize a generic HTTP/2 frame object with the specified type, flags, stream ID, and payload body.
+                        
+                        Parameters:
+                            frame_type (int): The HTTP/2 frame type code.
+                            flags (int): The frame flags as an integer bitmask.
+                            stream_id (int): The stream identifier for this frame.
+                            body (bytes): The raw payload of the frame.
+                        """
                         self.type = frame_type
                         self.flags = flags
                         self.stream_id = stream_id
@@ -266,7 +305,11 @@ class HTTP2Decoder:
             return None
 
     def _handle_connection_frame(self, frame, connection, from_client):
-        """Handles HTTP/2 frames with Stream ID 0 (connection-level frames)."""
+        """
+        Handle HTTP/2 connection-level frames (Stream ID 0) such as SETTINGS, PING, and GOAWAY.
+        
+        Updates connection settings and HPACK decoder state for SETTINGS frames, logs PING and GOAWAY events, and provides debug output for unhandled connection-level frame types.
+        """
         if isinstance(frame, SettingsFrame):
             try:
                 settings_list = []
@@ -308,8 +351,9 @@ class HTTP2Decoder:
 
     def handle_frame(self, frame, stream, connection, from_client):
         """
-        Handles a stream-specific HTTP/2 frame, adding its data to the appropriate stream.
-        Triggers logging when a server response is complete.
+        Processes a stream-specific HTTP/2 frame and updates the corresponding stream state.
+        
+        Handles headers, data, push promises, window updates, stream resets, and priority frames by updating the stream's headers, data, or completion status as appropriate. For push promises, creates a new stream for the promised request if necessary. Logs relevant events and errors encountered during frame handling.
         """
         try:
             # Store the server_complete state *before* processing the current frame
@@ -353,8 +397,14 @@ class HTTP2Decoder:
 
     def find_next_frame(self, data, start_offset):
         """
-        Attempts to find the start of the next potential HTTP/2 frame header
-        after an error or incomplete data. This is a heuristic for recovery.
+        Heuristically searches for the next plausible HTTP/2 frame header in the data buffer starting from a given offset.
+        
+        Parameters:
+            data (bytes): The buffer to search for a frame header.
+            start_offset (int): The position in the buffer to begin searching.
+        
+        Returns:
+            int: The offset of the next potential frame header, or -1 if none is found.
         """
         # Iterate through the data from start_offset, looking for a plausible frame header
         for i in range(start_offset, len(data) - 9):

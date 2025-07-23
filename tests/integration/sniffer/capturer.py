@@ -87,6 +87,11 @@ HTTP_METHODS = [
 
 # MongoDB setup (singleton)
 def init_mongo_collection():
+    """
+    Initializes the MongoDB collection for storing packet analysis results.
+    
+    Creates the "packet_analysis" collection in the "integration-tests" database if it does not already exist, and assigns it to the global variable for use in data insertion.
+    """
     from pymongo import MongoClient
     from pymongo.errors import CollectionInvalid
 
@@ -101,6 +106,12 @@ def init_mongo_collection():
     mongo_collection = mongo_db["packet_analysis"]
 
 def get_mongo_collection():
+    """
+    Retrieve the initialized MongoDB collection for packet analysis.
+    
+    Returns:
+        The MongoDB collection instance if initialized; otherwise, None.
+    """
     global mongo_collection
     if mongo_collection is None:
         logging.error("MongoDB collection is not initialized. Call init_mongo_collection() first.")
@@ -108,7 +119,11 @@ def get_mongo_collection():
     return mongo_collection
 
 def insert_packet_analysis(entry):
-    """Insert a packet analysis entry into MongoDB, with error handling."""
+    """
+    Insert a packet analysis document into the MongoDB collection if available.
+    
+    If the collection is unavailable or insertion fails, logs an error.
+    """
     collection = get_mongo_collection()
     if collection is not None:
         try:
@@ -119,6 +134,18 @@ def insert_packet_analysis(entry):
         logging.error("Packet analysis entry not inserted: MongoDB collection unavailable.")
 
 def parse_start_time_from_filename(filename):
+    """
+    Extracts a Unix timestamp from a pcap filename containing a 14-digit datetime string.
+    
+    Parameters:
+    	filename (str): The pcap filename expected to end with a 14-digit timestamp (YYYYMMDDHHMMSS) followed by '.pcap'.
+    
+    Returns:
+    	float: The extracted timestamp as seconds since the Unix epoch.
+    
+    Raises:
+    	ValueError: If the filename does not contain a valid 14-digit timestamp before '.pcap'.
+    """
     import re
     from datetime import datetime
 
@@ -141,6 +168,12 @@ class ColoredFormatter(logging.Formatter):
     RESET = "\x1b[0m"
 
     def format(self, record):
+        """
+        Format a log record with color-coded level and timestamp for enhanced readability.
+        
+        Returns:
+        	A formatted log message string with colored timestamp and log level based on message content and severity.
+        """
         if "CAPTURED PAYLOAD" in record.msg:
             color = self.CYAN
         elif record.levelno >= logging.ERROR:
@@ -158,7 +191,11 @@ class ColoredFormatter(logging.Formatter):
 
 
 def setup_logging(log_level=logging.INFO):
-    """Setup colored logging."""
+    """
+    Configures the root logger with colored output and sets log levels for key modules.
+    
+    Sets up a stream handler with color formatting for log messages, applies the specified log level, and adjusts logging verbosity for scapy, watchdog, and h2_decoder modules.
+    """
     handler = logging.StreamHandler()
     formatter = ColoredFormatter()
     handler.setFormatter(formatter)
@@ -178,7 +215,9 @@ def setup_logging(log_level=logging.INFO):
 def format_and_log_payload(
     proto: str, src_ip: str, dst_ip: str, src_port: int, dst_port: int, payload: bytes
 ) -> None:
-    """Format and log captured payload."""
+    """
+    Formats and logs detailed information about a captured network payload, including protocol, flow, timestamp, size, and a decoded or hexadecimal representation of the payload.
+    """
     src = IP_TO_ALIAS.get(src_ip, src_ip)
     dst = IP_TO_ALIAS.get(dst_ip, dst_ip)
 
@@ -210,7 +249,12 @@ def format_and_log_payload(
 
 
 def analyze_sctp_packet(packet) -> Optional[Dict[str, Any]]:
-    """Analyze SCTP packet for NGAP and other protocols."""
+    """
+    Analyzes an SCTP packet to identify the encapsulated protocol and extract relevant metadata.
+    
+    Returns:
+        dict or None: A dictionary containing the detected protocol ("SCTP", "NGAP", or "S1AP"), source port, destination port, and payload bytes, or None if the packet does not contain an SCTP layer.
+    """
     if not packet.haslayer(SCTP):
         return None
 
@@ -238,7 +282,12 @@ def analyze_sctp_packet(packet) -> Optional[Dict[str, Any]]:
 
 
 def analyze_udp_packet(packet) -> Optional[Dict[str, Any]]:
-    """Analyze UDP packet for PFCP and other protocols."""
+    """
+    Analyzes a UDP packet to identify PFCP, GTP-U, or GTP-C protocols based on port numbers.
+    
+    Returns:
+        dict or None: A dictionary containing the detected protocol name, source port, destination port, and payload bytes if the packet has a UDP layer; otherwise, None.
+    """
     if not packet.haslayer(UDP):
         return None
 
@@ -267,7 +316,12 @@ def analyze_udp_packet(packet) -> Optional[Dict[str, Any]]:
 
 
 def analyze_tcp_packet(packet) -> Optional[Dict[str, Any]]:
-    """Analyze TCP packet for HTTP and other protocols."""
+    """
+    Analyzes a TCP packet to identify and extract HTTP request, HTTP response, or generic TCP payload information.
+    
+    Returns:
+        dict or None: A dictionary containing the detected protocol type ("HTTP-REQ", "HTTP-RESP", or "TCP"), source port, destination port, and payload bytes. Returns None if the packet does not contain a TCP layer.
+    """
     if not packet.haslayer(TCP):
         return None
 
@@ -306,6 +360,14 @@ def analyze_tcp_packet(packet) -> Optional[Dict[str, Any]]:
 
 
 def format_payload_for_log(payload):
+    """
+    Format a payload string for logging, truncating it to 1000 characters if necessary.
+    
+    If the payload is a string shorter than 1000 characters, it is returned as-is. Otherwise, the payload is converted to a string and truncated to the first 1000 characters, followed by an ellipsis to indicate truncation.
+    
+    Returns:
+        str: The formatted (possibly truncated) payload string.
+    """
     if isinstance(payload, str) and len(payload) < 1000:
         return payload
     else:
@@ -329,6 +391,28 @@ def store_reconstructed_payload(
     method=None,
     additional_data={},
 ):
+    """
+    Stores reconstructed protocol payload details, including metadata, headers, and bodies, in memory and MongoDB, and logs a formatted summary for analysis.
+    
+    Parameters:
+        protocol (str): Protocol name (e.g., HTTP/1, HTTP/2, SCTP).
+        src_ip (str): Source IP address.
+        dst_ip (str): Destination IP address.
+        src_port (int): Source port number.
+        dst_port (int): Destination port number.
+        req_headers (dict, optional): HTTP or protocol request headers.
+        path (str, optional): Request path or resource identifier.
+        payload (bytes or str, optional): Raw payload data.
+        request (bytes or str, optional): Request body or content.
+        response (bytes or str, optional): Response body or content.
+        resp_headers (dict, optional): HTTP or protocol response headers.
+        resp_status (int or str, optional): Response status code.
+        resp_reason (str, optional): Response status reason phrase.
+        method (str, optional): HTTP or protocol method.
+        additional_data (dict, optional): Any extra parsed or protocol-specific data.
+    
+    The reconstructed payload is appended to a global list, inserted into the MongoDB collection, and a human-readable summary is logged.
+    """
     src_ip_alias = IP_TO_ALIAS[src_ip]
     dst_ip_alias = IP_TO_ALIAS[dst_ip]
     entry = {
@@ -380,6 +464,11 @@ def store_reconstructed_payload(
 
 # --- HTTP/2 TCP stream reassembly and parsing ---
 def process_tcp_packet_http2(packet, _src_ip, _dst_ip, _src_port, _dst_port, _payload):
+    """
+    Processes a TCP packet as HTTP/2, reconstructs streams, extracts headers and payloads, and stores the parsed data.
+    
+    For each HTTP/2 stream segment decoded from the packet, extracts method, path, status, headers, and payloads. Logs warnings for missing or unknown HTTP/2 fields. Stores the reconstructed HTTP/2 message in persistent storage.
+    """
     global http2_decoder
     if http2_decoder is None:
         http2_decoder = HTTP2Decoder()
@@ -389,14 +478,15 @@ def process_tcp_packet_http2(packet, _src_ip, _dst_ip, _src_port, _dst_port, _pa
 
             def find_in_pairs(pairs, key, default=None):
                 """
-                Find the value in a list of (key, value) pairs by matching the first element.
-
-                Args:
-                    pairs (list of tuple): List of (key, value) pairs.
-                    key (str): The key to search for.
-
+                Return the value associated with a given key from a list of (key, value) pairs.
+                
+                Parameters:
+                    pairs (list of tuple): List of (key, value) pairs to search.
+                    key: The key to look for.
+                    default: Value to return if the key is not found.
+                
                 Returns:
-                    str or None: The value corresponding to the key, or None if not found.
+                    The value corresponding to the key if found; otherwise, the default value.
                 """
                 for k, v in pairs:
                     if k == key:
@@ -441,6 +531,11 @@ def process_tcp_packet_http2(packet, _src_ip, _dst_ip, _src_port, _dst_port, _pa
 # --- HTTP/1 parsing and merging ---
 def process_tcp_packet_http1(packet, src_ip, dst_ip, src_port, dst_port, payload):
     # Note: No TCP reassembly is performed; each TCP packet is treated as a single HTTP message fragment.
+    """
+    Parses and processes a single HTTP/1.x message fragment from a TCP packet, reconstructing and storing HTTP requests or responses.
+    
+    Attempts to distinguish between HTTP requests and responses based on the payload, extracting headers, method, path, status, and body. Requests are stored for later matching with responses. When a response is detected, it is merged with the corresponding stored request if available; otherwise, the response is stored standalone. Unclassified fragments are stored as-is. All reconstructed data is passed to the payload storage function for logging and persistence.
+    """
     try:
         payload_str = payload.decode("utf-8", errors="replace")
         # Split headers and body
@@ -549,12 +644,22 @@ def process_tcp_packet_http1(packet, src_ip, dst_ip, src_port, dst_port, payload
 
 # --- SCTP storage ---
 def process_sctp_packet_store(packet, src_ip, dst_ip, src_port, dst_port, payload):
+    """
+    Stores the payload of an SCTP packet for analysis and logging.
+    
+    This function records the SCTP packet's payload along with its source and destination information by delegating to the payload storage mechanism.
+    """
     store_reconstructed_payload(
         "SCTP", src_ip, dst_ip, src_port, dst_port, None, None, payload
     )
 
 
 def log_l4_packet(proto, src_ip, dst_ip, src_port, dst_port, payload):
+    """
+    Log a summary of a Layer 4 or higher network packet, including protocol, endpoints, and a truncated payload.
+    
+    The payload is displayed as a hexadecimal string if it is bytes, or as a string otherwise, truncated to 200 characters.
+    """
     log_lines = [
         f"----- L4+ PACKET -----",
         f"  Protocol: {proto}",
@@ -568,6 +673,11 @@ def log_l4_packet(proto, src_ip, dst_ip, src_port, dst_port, payload):
 
 # --- Unified process_packet ---
 def process_packet(packet) -> None:
+    """
+    Processes a single network packet, filtering by target and ignored IPs, and dispatches protocol-specific analysis and logging.
+    
+    The function checks if the packet involves monitored IP addresses and is not from ignored IPs. It then determines the protocol (SCTP, TCP, or UDP), logs relevant payload information, and invokes the appropriate handler for further analysis and storage. For TCP packets, it heuristically distinguishes between HTTP/2 and HTTP/1 traffic and processes accordingly, with fallback handling for ambiguous cases.
+    """
     if not packet.haslayer(IP):
         return
     ip_layer = packet[IP]
@@ -644,6 +754,12 @@ def process_packet(packet) -> None:
 
 
 def process_pcap_file(pcap_file: str) -> None:
+    """
+    Processes all packets in a given pcap file, analyzing each packet and updating the total processed packet count.
+    
+    Parameters:
+        pcap_file (str): Path to the pcap file to be processed.
+    """
     global total_packets_count
     try:
         logging.info(f"Processing: {os.path.basename(pcap_file)}")
@@ -663,7 +779,15 @@ def process_pcap_file(pcap_file: str) -> None:
 
 
 def is_file_stable(file_path: str) -> bool:
-    """Check if file is stable (not being written to)."""
+    """
+    Determine whether a file's size remains unchanged over a configured interval, indicating it is no longer being written to.
+    
+    Parameters:
+        file_path (str): Path to the file to check.
+    
+    Returns:
+        bool: True if the file size is stable, False if it changes or the file is inaccessible.
+    """
     try:
         initial_size = os.path.getsize(file_path)
         time.sleep(PROCESSING_CONFIG["file_stability_wait"])
@@ -678,7 +802,11 @@ def is_file_stable(file_path: str) -> bool:
 
 
 def cleanup_processed_files():
-    """Clean up old entries from processed_files set."""
+    """
+    Removes older entries from the processed_files set to limit its size.
+    
+    Retains only the most recently created files, ensuring the set does not exceed half of the configured maximum tracked files.
+    """
     global processed_files
     if len(processed_files) > PROCESSING_CONFIG["max_tracked_files"]:
         # Keep only the most recent files
@@ -688,11 +816,23 @@ def cleanup_processed_files():
 
 
 def main_processing_loop_tshark_out(tshark_out_path: str):
-    """Main loop: use watchdog to monitor tshark out file for new pcap files and process them."""
+    """
+    Continuously monitors a tshark output file for new pcap file entries, processes each new file when stable, and manages processed file tracking.
+    
+    Watches the specified tshark output file for modifications using watchdog. When new pcap file paths are detected, ensures each file is stable before processing its packets. Tracks processed files to avoid duplicates and periodically cleans up the tracking set. Runs until interrupted or signaled to stop.
+    """
     global processed_files
     last_offset = 0
 
     def process_file_lines(lines):
+        """
+        Processes a list of file paths by checking their stability and processing new pcap files.
+        
+        Each file is processed only if it has not been handled before and is determined to be stable. After processing, the file is marked as processed and the set of tracked files is cleaned up to manage memory usage.
+        
+        Parameters:
+            lines (list of str): List of file paths to process.
+        """
         for fname in lines:
             fname = fname.strip()
             if fname and fname not in processed_files:
@@ -716,6 +856,12 @@ def main_processing_loop_tshark_out(tshark_out_path: str):
 
     class TsharkOutHandler(FileSystemEventHandler):
         def on_modified(self, event):
+            """
+            Handles file modification events for the tshark output file, reads new lines since the last offset, and processes them.
+            
+            Parameters:
+            	event: The file system event indicating a modification.
+            """
             nonlocal last_offset
             if event.src_path != os.path.abspath(tshark_out_path):
                 return
@@ -747,14 +893,23 @@ def main_processing_loop_tshark_out(tshark_out_path: str):
 
 
 def signal_handler(signum, frame):
-    """Handle shutdown signals."""
+    """
+    Handles process termination signals by logging the event and setting the processing flag to stop the main loop.
+    """
     global processing_running
     logging.info(f"Received signal {signum}, shutting down...")
     processing_running = False
 
 
 def build_tshark_command():
-    """Build the tshark command with the correct capture filter and options."""
+    """
+    Construct and return a tshark command configured to capture relevant network traffic.
+    
+    The command captures TCP packets with the PSH flag set, all UDP packets, and SCTP packets with chunk type 0 (DATA), filtering for specified target IPs and excluding ignored IPs. The resulting command includes options for interface selection, capture filters, output file, and file rotation.
+     
+    Returns:
+        list: The tshark command as a list of arguments suitable for subprocess execution.
+    """
     # TCP: PSH flag set (data transfer)
     tcp_psh_condition = "tcp and tcp[13] & 8 != 0"  # PSH flag
     # UDP: All UDP packets
@@ -808,7 +963,11 @@ def build_tshark_command():
 
 
 def main():
-    """Main function."""
+    """
+    Entry point for the packet processor CLI, handling argument parsing, logging setup, and execution mode selection.
+    
+    Depending on the selected mode, either prints the tshark capture command or processes pcap files listed in the specified tshark output file. Initializes MongoDB integration and manages the main processing loop for packet analysis.
+    """
     parser = argparse.ArgumentParser(
         description="Packet processor for tshark pcap output."
     )
