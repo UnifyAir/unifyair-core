@@ -1,3 +1,5 @@
+
+
 # 5G Network Functions (NFs) and Local IP Addresses
 
 This document lists all 5G core network functions (NFs) used for integration testing, along with their local unique IP addresses. You can allocate these IPs to the respective NFs for your 5G network testing setup.
@@ -39,3 +41,18 @@ This document lists all 5G core network functions (NFs) used for integration tes
 Ran1 = Ip Address: 10.0.0.101
 Ran2 = Ip Address: 10.0.0.102
 Ran3 = Ip Address: 10.0.1.103
+
+
+
+## Note for Docker Desktop UI Users
+
+To allow containers to use `localhost` to connect to TCP and UDP services on the host (and vice versa), you must enable the "Host networking" option in Docker Desktop. This is only required if you are using the Docker Desktop UI to manage containers. If you are running containers via the CLI with `--net=host`, this step is not needed.
+
+**How to enable Host Networking in Docker Desktop:**
+1. Open Docker Desktop.
+2. Go to the **Resources** tab in the left sidebar.
+3. Click on the **Networking** section.
+4. Enable the option: **"Enable host networking"**.
+   - This allows containers started with host networking to use `localhost` for TCP and UDP services on the host, and allows host software to use `localhost` to connect to services in the container.
+
+Enabling this option ensures the local unique IP addresses listed below are reachable as intended for integration testing.

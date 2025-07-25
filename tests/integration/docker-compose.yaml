@@ -2,8 +2,8 @@ services:
   capturer:
     build:
       context: ./sniffer
-      dockerfile: Dockerfile # Assumes your Dockerfile is named 'Dockerfile'
-    command:  sh -c "rm -rf /app/capture/* /app/capture/.* 2>/dev/null || true;  /usr/bin/supervisord -c ./supervisord.conf"
+      dockerfile: Dockerfile 
+    command:  sh -c "rm -rf /app/capture/* /app/capture/.* 2>/dev/null || true; touch /app/capture/tshark.out;  /usr/bin/supervisord -c ./supervisord.conf"
     container_name: capturer
     volumes:
       - ./capture:/app/capture
@@ -12,12 +12,11 @@ services:
       - ./sniffer/supervisord.conf:/app/supervisord.conf
     network_mode: host
     # CRITICAL: Add capabilities to allow packet sniffing
-    # cap_add:
-    #   - NET_RAW
-    #   - NET_ADMIN
-    #   - SYS_ADMIN
-    privileged: true 
-    stop_grace_period: 1m10s
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+      - SYS_ADMIN
+    stop_grace_period: 50s
     depends_on:
       - db
     healthcheck:
@@ -41,7 +40,7 @@ services:
         aliases:
           - mongo.unifyair.com
           - db
-    stop_grace_period: 1m10s
+    stop_grace_period: 50s
 
   # TODO: Needs gtp5g kernel module
   upf:
@@ -109,7 +108,6 @@ services:
       - nrf
     healthcheck:
       # TODO: Modify Dockerfile to install curl and check if webui is started
-      # test: ["CMD", "curl", "-f", "http://localhost:5000/"]
       test: [ "CMD", "true" ]
       interval: 5s
       timeout: 3s
@@ -140,11 +138,9 @@ services:
     image: unifyair/omnipath
     container_name: omnipath
     command: ./lightning-cli omnipath --config ./config/omnipathcfg.yaml
-    # command: tail -f /dev/null
     environment:
       COLORBT_SHOW_HIDDEN: 1
       RUST_BACKTRACE: full
-    # command: tail -f /dev/null
     volumes:
       - ./config/omnipathcfg.yaml:/unifyair/config/omnipathcfg.yaml
     expose:
