@@ -141,9 +141,7 @@ class ColoredFormatter(logging.Formatter):
     RESET = "\x1b[0m"
 
     def format(self, record):
-        if "CAPTURED PAYLOAD" in record.msg:
-            color = self.CYAN
-        elif record.levelno >= logging.ERROR:
+        if record.levelno >= logging.ERROR:
             color = self.RED
         elif record.levelno >= logging.WARNING:
             color = self.YELLOW
@@ -170,6 +168,7 @@ def setup_logging(log_level=logging.INFO):
 
     # Silence scapy warnings
     logging.getLogger("scapy").setLevel(logging.ERROR)
+    logging.getLogger("pymongo").setLevel(logging.ERROR)
     logging.getLogger("watchdog").setLevel(logging.ERROR)
     logging.getLogger("h2_decoder").setLevel(log_level)
     logging.getLogger("h2_decoder").handlers.clear()
