@@ -1,7 +1,6 @@
 group "default" {
-  targets = [ "builder-base", "executor-base", "omnipath"]
+  targets = [ "builder-base", "executor-base", "omnipath-debug"]
 }
-
 
 target "builder-base" {
   context = "."
@@ -15,13 +14,29 @@ target "executor-base" {
   tags = ["unifyair/executor-base:latest"]
 }
 
-target "omnipath" {
+target "omnipath-debug" {
   contexts = {
     builder-base = "target:builder-base"
     executor-base = "target:executor-base"
   }
+  args = {
+    MODE = "debug"
+  }
   dockerfile = "deploy/omnipath/Dockerfile"
-  tags = ["unifyair/omnipath"]
+  tags = ["unifyair/omnipath-debug:latest"]
+  depends_on = ["builder-base", "executor-base"]
+} 
+
+target "omnipath-release" {
+  contexts = {
+    builder-base = "target:builder-base"
+    executor-base = "target:executor-base"
+  }
+  args = {
+    MODE = "release"
+  }
+  dockerfile = "deploy/omnipath/Dockerfile"
+  tags = ["unifyair/omnipath-release:latest"]
   depends_on = ["builder-base", "executor-base"]
 } 
 
@@ -31,6 +46,6 @@ target "gnbsim" {
     VERSION = "1.6.3"
     DEBUG_TOOLS = "false"
   }
-  tags = ["omecproject/5gc-gnbsim:rel-1.6.3"]
+  tags = ["unifyair/omecproject-gnbsim:1.6.3"]
   depends_on = ["builder-base", "executor-base"]
 }

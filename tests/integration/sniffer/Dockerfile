@@ -1,6 +1,8 @@
-# Use a slim Python base image
-# FROM python:3.10-slim-bookworm
-FROM ubuntu:25.10
+# Use Python 3.10 slim base image (based on Debian Bookworm)
+FROM python:3.10-slim-bookworm
+
+# Set maintainer label
+LABEL maintainer="UnifyAir <support@unifyair.com>"
 
 # Install build dependencies and system packages
 RUN apt-get update && apt-get install -y \
@@ -18,18 +20,18 @@ RUN apt-get update && apt-get install -y \
     bison \
     wget \
     byacc \
+    libc-ares-dev \
+    libspeexdsp-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Create supervisor log directory
 RUN mkdir -p /var/log/supervisor
 
-# RUN apt-get install -y cares && rm -rf /var/lib/apt/lists/*
-
-# Download and compile tshark 4.4.7
+# Download and extract Wireshark source
 RUN wget https://www.wireshark.org/download/src/wireshark-4.4.7.tar.xz \
-    && tar -xf wireshark-4.4.7.tar.xz 
+    && tar -xf wireshark-4.4.7.tar.xz
 
-RUN apt-get update && apt-get install -y libc-ares-dev  libspeexdsp-dev
-
+# Compile and install Wireshark (tshark only)
 RUN cd wireshark-4.4.7 && mkdir build && cd build \
     && cmake -DBUILD_wireshark=OFF .. \
     && make -j$(nproc) \
@@ -37,10 +39,9 @@ RUN cd wireshark-4.4.7 && mkdir build && cd build \
     && cd / \
     && rm -rf wireshark-4.4.7* \
     && ldconfig
-RUN apt-get install -y python3 python3-pip python3.13-venv
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install scapy colorama watchdog h2 pymongo
 
-# Set the working directory
+# Install Python packages
+RUN pip install --no-cache-dir scapy colorama watchdog h2 pymongo
+
+# Set working directory
 WORKDIR /app
