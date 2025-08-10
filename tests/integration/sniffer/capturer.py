@@ -447,6 +447,7 @@ def process_tcp_packet_http1(packet, src_ip, dst_ip, src_port, dst_port, payload
             header_part, body = payload_str.split("\r\n\r\n", 1)
         else:
             header_part, body = payload_str, ""
+        body = body.encode('utf-8')  # Convert to bytes outside the if-else
         headers = {}
         path = ""
         resp_status = None

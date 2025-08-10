@@ -24,9 +24,7 @@ RUN make all
 
 FROM alpine:3.22 AS gnbsim
 
-LABEL maintainer="Aether SD-Core <dev@lists.aetherproject.org>" \
-    description="Aether open source 5G Core Network" \
-    version="Stage 3"
+LABEL maintainer="UnifyAir <support@unifyair.com>"
 
 ARG DEBUG_TOOLS
 

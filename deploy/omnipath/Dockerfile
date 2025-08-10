@@ -13,15 +13,24 @@ COPY --from=planner /unifyair/recipe.json recipe.json
 
 # TODO: cleanup https://github.com/LukeMathWalker/cargo-chef/issues/271
 COPY ./rust-toolchain.toml rust-toolchain.toml
-RUN cargo chef cook --release --recipe-path recipe.json
+ARG MODE
+RUN if [ "$MODE" = "release" ]; then \
+        cargo chef cook --release --recipe-path recipe.json; \
+    else \
+        cargo chef cook --recipe-path recipe.json; \
+    fi
 # --- Build application
 COPY . .
-RUN cargo build --release --package lightning-cli
+ARG MODE
+RUN if [ "$MODE" = "release" ]; then \
+        cargo build --release --package lightning-cli; \
+    else \
+        cargo build --package lightning-cli; \
+    fi
 
 # --- Runtime stage
 FROM executor-base AS executor
 WORKDIR /unifyair
 RUN mkdir -p /unifyair/config
-COPY --from=builder /unifyair/target/release/lightning-cli /unifyair/lightning-cli
-
-EXPOSE 8000
+ARG MODE
+COPY --from=builder /unifyair/target/$MODE/lightning-cli /unifyair/lightning-cli

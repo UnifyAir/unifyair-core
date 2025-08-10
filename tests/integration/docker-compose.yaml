@@ -1,8 +1,6 @@
 services:
   capturer:
-    build:
-      context: ./sniffer
-      dockerfile: Dockerfile 
+    image: unifyair/tshark-capturer:4.4.7 
     command:  sh -c "rm -rf /app/capture/* /app/capture/.* 2>/dev/null || true; touch /app/capture/tshark.out;  /usr/bin/supervisord -c ./supervisord.conf"
     container_name: capturer
     volumes:
@@ -60,7 +58,7 @@ services:
           - upf.unifyair.com
 
   nrf:
-    image: free5gc/nrf
+    image: free5gc/nrf:v4.0.1
     container_name: nrf
     command: ./nrf -c ./config/nrfcfg.yaml
     volumes:
@@ -135,7 +133,7 @@ services:
         ipv4_address: 10.0.255.1
 
   omnipath:
-    image: unifyair/omnipath
+    image: unifyair/omnipath-debug:latest
     container_name: omnipath
     command: ./lightning-cli omnipath --config ./config/omnipathcfg.yaml
     environment:
@@ -328,7 +326,7 @@ services:
       - nrf
 
   gnbsim:
-    image: omecproject/5gc-gnbsim:rel-1.6.3
+    image: unifyair/omecproject-gnbsim:1.6.3
     container_name: gnbsim
     command: gnbsim --cfg ./config/gnbsimcfg.yaml
     volumes:
