@@ -2,6 +2,10 @@ group "default" {
   targets = [ "builder-base", "executor-base", "omnipath-debug"]
 }
 
+group "dockerhub" {
+  targets = ["gnbsim", "tshark-capturer"]
+}
+
 target "builder-base" {
   context = "."
   dockerfile = "deploy/base/Dockerfile.builder"
@@ -46,6 +50,19 @@ target "gnbsim" {
     VERSION = "1.6.3"
     DEBUG_TOOLS = "false"
   }
+  platforms = [
+    "linux/amd64",
+    "linux/arm64"
+  ]
   tags = ["unifyair/omecproject-gnbsim:1.6.3"]
-  depends_on = ["builder-base", "executor-base"]
+}
+
+
+target "tshark-capturer" {
+  dockerfile = "deploy/tshark-capturer/Dockerfile"
+  platforms = [
+    "linux/amd64",
+    "linux/arm64"
+  ]
+  tags = ["unifyair/tshark-capturer:4.4.7"]
 }
