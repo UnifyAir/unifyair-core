@@ -1,5 +1,6 @@
 #![feature(error_generic_member_access)]
 #![feature(adt_const_params)]
+#![feature(generic_const_exprs)]
 #![feature(async_closure)]
 
 use std::{backtrace::Backtrace, error::Error, fmt::Debug};

@@ -6,6 +6,7 @@ use thiserror::Error;
 use tokio::sync::OwnedRwLockWriteGuard;
 
 use super::context_queue::ContextQueue;
+use crate::utils::SeqLock;
 
 /// A trait for types that can be identified by a unique ID.
 ///
@@ -192,10 +193,7 @@ impl<T: Identifiable + Send + Sync + 'static> ContextManager<T> {
 		closure: F,
 	) -> Result<O, ContextError<T>>
 	where
-		F: FnOnce(OwnedRwLockWriteGuard<T>) -> PinnedSendSyncFuture<O>
-			+ Send
-			+ Sync
-			+ 'static,
+		F: FnOnce(Arc<SeqLock<T>>) -> PinnedSendSyncFuture<O> + Send + Sync + 'static,
 		O: Send + Sync + 'static,
 	{
 		let element = self.queues.read_async(&id, |_, queue| queue.clone()).await;

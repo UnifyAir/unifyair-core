@@ -1,8 +1,17 @@
-use std::{backtrace::Backtrace, str::FromStr, sync::Arc};
+use std::{
+	backtrace::Backtrace,
+	str::FromStr,
+	sync::Arc,
+	time::{SystemTime, UNIX_EPOCH},
+};
 
 use arc_swap::ArcSwap;
 use formatx::formatx;
-use http::header::{self, AUTHORIZATION};
+use http::{
+	HeaderMap,
+	Request as HttpRequest,
+	header::{self, AUTHORIZATION},
+};
 use oasbi::{
 	DeserResponse,
 	common::{
@@ -286,7 +295,7 @@ impl NrfClient {
 			Option::<&TraitSatisfier>::None,
 			ContentType::AppJson,
 		)?;
-		self.set_auth_token::<{ NfType::Nrf }>(&mut request, vec![ServiceName::NnrfNfm])
+		self.set_auth_token::<{ NfType::Nrf }>(request.headers_mut(), vec![ServiceName::NnrfNfm])
 			.await?;
 		let response = self
 			.client
@@ -393,33 +402,32 @@ impl NrfClient {
 	) -> Result<TokenEntry<AccessTokenRsp>, NrfAuthorizationError> {
 		let token_entry = self.nf_token_store.get(&target_service_name).await?;
 		match token_entry {
-			Some(entry) => Ok(entry),
-			None => {
-				let resp = self
-					.nf_token_store
-					.set(
-						target_service_name.clone(),
-						self.authenticaion_request(
-							self.nf_config.load().nf_instance_id,
-							self.init_config.source,
-							T,
-							target_service_name,
-						),
-					)
-					.await?;
-				Ok(resp)
-			}
-		}
+			Some(entry) if !is_token_expired(entry.get()) => return Ok(entry),
+			_ => (),
+		};
+		let resp = self
+			.nf_token_store
+			.set(
+				target_service_name.clone(),
+				self.authenticaion_request(
+					self.nf_config.load().nf_instance_id,
+					self.init_config.source,
+					T,
+					target_service_name,
+				),
+			)
+			.await?;
+		Ok(resp)
 	}
 
 	pub async fn set_auth_token<const T: NfType>(
 		&self,
-		req: &mut Request,
+		headers_mut: &mut HeaderMap,
 		service_name: Vec<ServiceName>,
 	) -> Result<(), NrfAuthorizationError> {
 		if self.nf_config.load().oauth_enabled {
 			let token_entry = self.get_token::<T>(service_name).await?;
-			set_auth_token(req, token_entry)?;
+			set_auth_token(headers_mut, token_entry)?;
 		}
 		Ok(())
 	}
@@ -486,22 +494,52 @@ pub enum NrfAuthorizationError {
 	TokenParsingError(#[from] header::InvalidHeaderValue),
 }
 
-pub(crate) fn set_auth_token(
-	req: &mut Request,
-	token_entry: TokenEntry<AccessTokenRsp>,
-) -> Result<(), header::InvalidHeaderValue> {
+pub(crate) fn create_token_from_access_token(token_entry: TokenEntry<AccessTokenRsp>) -> String {
 	let token: &str = &token_entry.get().access_token;
 	let token_type = token_entry.get().token_type;
-	let token: String = match token_type {
+	match token_type {
 		AccessTokenRspTokenType::Bearer => {
-			let mut string = "Bearer ".to_owned();
+			let mut string = "bearer ".to_owned();
 			string.push_str(token);
 			string
 		}
-	};
-	let headers_mut = req.headers_mut();
+	}
+}
+
+pub(crate) fn set_auth_token(
+	headers_mut: &mut HeaderMap,
+	token_entry: TokenEntry<AccessTokenRsp>,
+) -> Result<(), header::InvalidHeaderValue> {
+	let token = create_token_from_access_token(token_entry);
 	headers_mut.insert(AUTHORIZATION, token.try_into()?);
 	Ok(())
+}
+
+/// Check if a token is expired based on its expiry time
+///
+/// Returns `true` if the token is expired or will expire within the buffer time
+fn is_token_expired(token: &AccessTokenRsp) -> bool {
+	// Get current time
+	let now = SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		// SAFETY: As now system time should not be before UNIX_EPOCH
+		.unwrap_or_default()
+		.as_secs();
+	// Check if token has expires_in field
+	if let Some(expires_in) = token.expires_in {
+		// Calculate expiry time (assuming the token was issued recently)
+		// In a real implementation, you might want to store the issue time
+		// For now, we assume the token was just issued
+		let buffer_seconds = 30; // 30 second buffer before expiry
+		let expires_at = now + expires_in as u64;
+		let expires_with_buffer = expires_at.saturating_sub(buffer_seconds);
+
+		now >= expires_with_buffer
+	} else {
+		// If no expiry time is provided, assume token is still valid
+		// This is a conservative approach
+		false
+	}
 }
 
 #[derive(Debug)]

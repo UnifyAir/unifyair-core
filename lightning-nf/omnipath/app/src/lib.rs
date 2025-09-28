@@ -1,8 +1,11 @@
 #![feature(error_generic_member_access)]
+#![feature(adt_const_params)]
+#![feature(unsized_const_params)]
 
 pub mod builder;
 pub(crate) mod config;
 pub(crate) mod context;
+pub mod nas_old;
 pub mod nas;
 pub mod ngap;
 pub mod utils;

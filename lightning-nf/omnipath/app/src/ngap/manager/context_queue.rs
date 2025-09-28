@@ -8,10 +8,11 @@ use std::{
 	},
 };
 
-use tokio::sync::{Mutex, OwnedRwLockWriteGuard, RwLock, oneshot};
+use tokio::sync::{Mutex, oneshot};
 use tracing::Instrument;
 
 use super::context_manager::Identifiable;
+use crate::utils::SeqLock;
 
 /// `ContextQueue` is designed to manage and execute asynchronous operations on
 /// a shared context (`T`) in a sequential manner. It combines an internal,
@@ -33,7 +34,7 @@ use super::context_manager::Identifiable;
 /// empty.
 
 pub(crate) struct ContextQueue<T> {
-	inner: Arc<RwLock<T>>,
+	inner: Arc<SeqLock<T>>,
 	queue: Arc<Mutex<VecDeque<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>>>,
 	processor_active: AtomicBool,
 }
@@ -41,7 +42,7 @@ pub(crate) struct ContextQueue<T> {
 impl<T> ContextQueue<T> {
 	pub fn new(context: T) -> Self {
 		ContextQueue {
-			inner: Arc::new(RwLock::new(context)),
+			inner: Arc::new(SeqLock::new(context)),
 			queue: Arc::new(Mutex::new(VecDeque::new())),
 			processor_active: AtomicBool::new(false),
 		}
@@ -52,7 +53,7 @@ impl<T> ContextQueue<T> {
 	/// operations.
 	pub unsafe fn into_inner(self) -> Option<T> {
 		let t = Arc::into_inner(self.inner);
-		t.map(|t| t.into_inner())
+		t.map(|t| unsafe { t.into_inner() })
 	}
 }
 
@@ -132,9 +133,7 @@ where
 		tx: oneshot::Sender<O>,
 	) -> Pin<Box<dyn Future<Output = ()> + Send + Sync + 'static>>
 	where
-		F: FnOnce(
-				OwnedRwLockWriteGuard<T>,
-			) -> Pin<Box<dyn Future<Output = O> + Send + Sync + 'static>>
+		F: FnOnce(Arc<SeqLock<T>>) -> Pin<Box<dyn Future<Output = O> + Send + Sync + 'static>>
 			+ Send
 			+ Sync
 			+ 'static,
@@ -142,8 +141,10 @@ where
 	{
 		let context = self.inner.clone();
 		Box::pin(async move {
-			let context = context.write_owned().await;
-			let id = *context.id();
+			let context = context;
+			// SAFETY: Context Manager Ensures that the future is executed one by one.
+			let id = *unsafe { context.get() }.id();
+
 			let future = closure(context).instrument(tracing::info_span!("ContextQueue", id = ?id));
 			let output = future.await;
 			// The receiver will be waiting for this result, so we ignore the
@@ -188,9 +189,7 @@ where
 		closure: F,
 	) -> O
 	where
-		F: FnOnce(
-				OwnedRwLockWriteGuard<T>,
-			) -> Pin<Box<dyn Future<Output = O> + Send + Sync + 'static>>
+		F: FnOnce(Arc<SeqLock<T>>) -> Pin<Box<dyn Future<Output = O> + Send + Sync + 'static>>
 			+ Send
 			+ Sync
 			+ 'static,

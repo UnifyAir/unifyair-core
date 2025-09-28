@@ -9,7 +9,7 @@ use valuable::Valuable;
 
 use super::{
 	decode_ngap_pdu,
-	interfaces::{NgapRequestHandler, NgapResponseError},
+	interface::{NgapRequestHandler, NgapResponseError},
 	utils::codec_to_bytes,
 };
 use crate::{

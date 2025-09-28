@@ -1,4 +1,11 @@
-use std::{convert::Infallible, iter::once, net::SocketAddr, ops::AsyncFn, sync::Arc};
+use std::{
+	convert::Infallible,
+	iter::once,
+	marker::PhantomData,
+	net::SocketAddr,
+	ops::AsyncFn,
+	sync::Arc,
+};
 
 use bytes::Bytes;
 use http::{
@@ -11,11 +18,13 @@ use http::{
 	request::Builder as HttpReqBuilder,
 };
 use http_body_util::BodyExt;
+use hyper_util::service;
 use oasbi::{DeserResponse, common::NfType, nrf::types::NfProfile};
 use openapi_nrf::models::{
 	SearchNfInstancesHeaderParams,
 	SearchNfInstancesQueryParams,
 	SearchResult,
+	ServiceName,
 };
 use reqwest::{Body, Client, ClientBuilder, Request, Response};
 use serde::Serialize;
@@ -42,9 +51,14 @@ use tower_reqwest::{HttpClientLayer, HttpClientService};
 use url::Url;
 
 pub mod amf;
+mod oauth_service;
+mod service_discovery;
+use oauth_service::OAuthTokenLayer;
+use service_discovery::ServiceDiscoveryLayer;
 
 use crate::{
 	GenericClientError,
+	nf_clients::{oauth_service::OAuthTokenService, service_discovery::ServiceDiscovery},
 	nrf_client::{NrfClient, NrfDiscoveryError},
 	to_headers,
 };
@@ -59,6 +73,7 @@ pub trait NfClientController {
 		&self,
 		search_result: SearchResult,
 	) -> NfProfile;
+
 	fn get_search_params(
 		&self,
 		requester_nf_type: NfType,
@@ -71,39 +86,67 @@ pub trait NfClientController {
 	}
 }
 
-type TowerReqwestClient = SetSensitiveRequestHeaders<
-	Trace<HttpClientService<Client>, SharedClassifier<ServerErrorsAsFailures>>,
+type TowerReqwestClient<T, const TARGET_TYPE: NfType> = ServiceDiscovery<
+	OAuthTokenService<
+		SetSensitiveRequestHeaders<
+			Trace<HttpClientService<Client>,
+SharedClassifier<ServerErrorsAsFailures>>, 		>,
+		TARGET_TYPE,
+	>,
+	T,
+	TARGET_TYPE,
 >;
 
-pub struct NFClient<T, const APP_TYPE: NfType> {
-	nrf_client: Arc<NrfClient>,
-	controller: T,
-	nf_profile: NfProfile,
-	req_client: TowerReqwestClient,
+// type TowerReqwestClient<T, const TARGET_TYPE: NfType> = ServiceDiscovery<
+// 	SetSensitiveRequestHeaders<
+// 		Trace<HttpClientService<Client>, SharedClassifier<ServerErrorsAsFailures>>,
+// 	>,
+// 	T,
+// 	TARGET_TYPE,
+// >;
+
+// type TowerReqwestClient<const TARGET_TYPE: NfType> = OAuthTokenService<
+// 	SetSensitiveRequestHeaders<
+// 		Trace<HttpClientService<Client>, SharedClassifier<ServerErrorsAsFailures>>,
+// 	>,
+// 	TARGET_TYPE,
+// >;
+
+pub struct NFClient<T, const APP_TYPE: NfType, const TARGET_TYPE: NfType>
+where
+	T: NfClientController + Send + Sync + 'static,
+{
+	req_client: TowerReqwestClient<T, TARGET_TYPE>,
+	controller: PhantomData<T>,
 }
 
-impl<T, const APP_TYPE: NfType> NFClient<T, APP_TYPE>
+impl<T, const APP_TYPE: NfType, const TARGET_TYPE: NfType> NFClient<T, APP_TYPE, TARGET_TYPE>
 where
-	T: NfClientController + ApiBaseUrl,
+	T: NfClientController + Send + Sync + 'static,
 {
 	pub async fn new(
 		nrf_client: Arc<NrfClient>,
 		controller: T,
+		services: Vec<ServiceName>,
 	) -> Result<Self, NfClientError> {
 		// let url = controller.base_url();
-		let search_params = controller.get_search_params(APP_TYPE);
-		let header_params = SearchNfInstancesHeaderParams {
-			..Default::default()
-		};
-		let search_result = nrf_client
-			.search_nf_instance(search_params, header_params)
-			.await?;
-		let nf_profile = controller.profile_selection(search_result);
 		let builder = ClientBuilder::new();
 		let client = builder.build()?;
+		// let oauth_layer = OAuthTokenLayer::new(nrf_client.clone(), services.clone());
+		let arc_services = services.into();
+		let arc_controller = Arc::new(controller);
+
+		let service_discovery_layer = ServiceDiscoveryLayer::<T, TARGET_TYPE>::new(
+			nrf_client,
+			arc_controller,
+			T::CLIENT_TYPE,
+			arc_services,
+		);
 
 		let service = ServiceBuilder::new()
 			// Mark the `Authorization` request header as sensitive so it doesn't show in logs
+			.layer(service_discovery_layer)
+			.layer(oauth_layer)
 			.layer(SetSensitiveRequestHeadersLayer::new(once(AUTHORIZATION)))
 			// High level logging of requests and responses
 			.layer(TraceLayer::new_for_http())
@@ -111,9 +154,7 @@ where
 			.service(client);
 
 		Ok(NFClient {
-			nrf_client,
-			controller,
-			nf_profile,
+			controller: PhantomData,
 			req_client: service,
 		})
 	}

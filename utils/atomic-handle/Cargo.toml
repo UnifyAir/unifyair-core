@@ -1,0 +1,12 @@
+[package]
+name = "atomic-handle"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+publish.workspace = true
+readme.workspace = true
+
+[dependencies]
