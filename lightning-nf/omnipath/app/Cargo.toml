@@ -57,8 +57,10 @@ valuable.workspace = true
 ascii.workspace = true
 non-empty-string.workspace = true
 statig.workspace = true
+atomic_enum.workspace = true
 
 counter = { path = "../../../utils/counter" }
 client = { path = "../../../utils/client" }
 nf-base = { path = "../../../utils/nf-base" }
+atomic-handle = {path = "../../../utils/atomic-handle"}
 

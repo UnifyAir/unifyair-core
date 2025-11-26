@@ -1,7 +1,7 @@
 pub mod controller;
-mod interfaces;
+mod interface;
 mod ue_actions;
 mod utils;
 
-pub use interfaces::*;
+pub use interface::*;
 pub use utils::decode_ngap_pdu;

@@ -1,33 +1,29 @@
-use std::{future::Future, sync::Arc};
-
+mod interface;
+mod registration_req;
+pub use interface::{InvalidStateTransition, NasMessageHandle};
 use crate::context::UeContext;
-use nas_context::NasContext;
-use error::NasHandlerError;
 
 
-pub mod nas_context;
-mod handlers;
-mod error;
-mod gmm;
-mod builders;
-mod ue_actions;
+impl UeContext {
+	pub async fn handle_nas(
+		&mut self,
+		nas_pdu: Vec<u8>,
+	) {
 
+		// * Need some thought here about how to handle this
 
-pub trait NasHandler {
-    fn handle(
-        &self,
-        nas_context: &mut NasContext,
-        ue_context: &mut UeContext,
-    ) -> impl Future<Output = Result<(), NasHandlerError>> + Send;
+		// // Todo: fix this to have a single Bytes for Ngap and Nas
+		// let mut bytes = Bytes::from(nas_pdu);
+
+		// let mut gmm = self.gmm.clone();
+		// // Safety: unwrap over Arc::get_mut will succeed because
+		// // no one will get a mutable reference to the NasContext
+		// // and that will only be mutated through the StateMachine
+		// // Todo:: make nas_context internal field private by mod __private
+		// if let Ok(gmm_message) = GmmMessage::try_from(&mut bytes) {
+		// 	Arc::get_mut(&mut gmm).unwrap().handle_with_context(&gmm_message,
+		// self); } else {
+		// 	trace!("Invalid NAS PDU: {:?}", bytes);
+		// }
+	}
 }
-
-
-pub trait NasBuilder: Sized {
-    fn build(
-        nas_context: &NasContext,
-        ue_context: &UeContext,
-    ) -> Result<Self, NasHandlerError>;
-}
-
-
-

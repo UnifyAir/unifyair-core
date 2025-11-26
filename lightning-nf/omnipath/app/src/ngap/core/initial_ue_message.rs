@@ -1,19 +1,31 @@
 use std::sync::Arc;
 
 use ngap_models::{AmfUeNgapId, InitialUeMessage, RanUeNgapId};
-use statig::awaitable::IntoStateMachineExt;
 use thiserror::Error;
-use tokio::sync::OwnedRwLockWriteGuard;
+use tokio::sync::{OwnedRwLockWriteGuard, RwLock};
 
 use crate::{
-	context::{GnbContext, NgapContext, UeContext},
-	nas::nas_context::NasContext,
+	context::{AtomicGmmState, GmmState, GnbContext, NasContext, NgapContext, UeContext},
 	ngap::{
 		engine::{EmptyResponse, NgapRequestHandler, NgapResponseError},
 		manager::{ContextError, PinnedSendSyncFuture},
 	},
-	utils::models::FiveGSTmsi,
+	utils::{SeqLock, models::FiveGSTmsi},
 };
+
+async fn create_new_context(
+	ue_context: UeContext,
+	gnb: &GnbContext,
+) -> Result<(), UeContext> {
+	match gnb.ue_context_manager.add_context(ue_context).await {
+		Err(ContextError::ContextAlreadyExists(_, inner)) => {
+			return Err(inner);
+		}
+		Err(_) => unreachable!(),
+		Ok(_) => (),
+	};
+	Ok(())
+}
 
 impl NgapRequestHandler<InitialUeMessage, Arc<GnbContext>> for NgapContext {
 	type Success = EmptyResponse;
@@ -46,29 +58,39 @@ impl NgapRequestHandler<InitialUeMessage, Arc<GnbContext>> for NgapContext {
 			..
 		} = request;
 
-		let ue_context = UeContext::new(
-			ran_ue_ngap_id,
-			AmfUeNgapId(state.amf_ue_id_generator.increment()),
-			rrc_establishment_cause,
-			state.clone(),
-			five_g_s_tmsi.map(FiveGSTmsi::from),
-			Arc::new(NasContext::new().state_machine()),
-		);
-
-		match state.ue_context_manager.add_context(ue_context).await {
-			Err(ContextError::ContextAlreadyExists(_, inner)) => {
-				return Err(NgapResponseError::new_empty_failure_error(
-					UeContextAlreadyExistsError::UeContext(inner),
-				));
+		// Add appropriate context to context manager
+		match five_g_s_tmsi {
+			Some(tmsi) => {
+				// Already registered user. Service Request
+				// TODO: Fetch the ue context from the idle ue and move it into
+				// context manager.
 			}
-			Err(_) => unreachable!(),
-			Ok(_) => (),
+			None => {
+				let nas_context =
+					NasContext::new(rrc_establishment_cause, five_g_s_tmsi.map(FiveGSTmsi::from));
+				let ue_context = UeContext::new(
+					ran_ue_ngap_id,
+					AmfUeNgapId(state.amf_ue_id_generator.increment()),
+					state.clone(),
+					AtomicGmmState::new(GmmState::Deregistered),
+					nas_context
+				);
+
+				match create_new_context(ue_context, &state).await {
+					// Another registration has started, so schedule this event onto that.
+					// TODO: Add handling of different RRC Establishment Causes
+					Err(_) => (),
+					Ok(()) => (),
+				};
+			}
 		};
 
-		let future_closure = move |mut ue_context: OwnedRwLockWriteGuard<UeContext>| {
+		let future_closure = move |mut ue_context: Arc<SeqLock<UeContext>>| {
 			let nas_pdu = nas_pdu.0;
 			Box::pin(async move {
-				ue_context.handle_nas(nas_pdu).await;
+				// SAFETY: Context Manager Ensures that futures are executed one by one.
+				let ue_context_mut = unsafe { ue_context.get_mut() };
+				ue_context_mut.handle_nas(nas_pdu).await;
 			}) as PinnedSendSyncFuture<()>
 		};
 

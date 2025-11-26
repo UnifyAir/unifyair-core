@@ -1,6 +1,6 @@
 use nas_models::message as nas_message;
 
-use crate::nas::{NasContext, NasHandler, UeContext, NasHandlerError};
+use crate::nas_old::{NasContext, NasHandler, UeContext, NasHandlerError};
 
 
 impl NasHandler for nas_message::NasAuthenticationResponse {

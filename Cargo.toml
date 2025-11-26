@@ -49,7 +49,6 @@ http-body-util = "0.1.2"
 tower-reqwest = "0.4.0"
 color-eyre = "0.6"
 tracing-error = "0.2.1"
-
 asn1_codecs_derive = "0.7.0"
 asn1-codecs = "0.7.0"
 smart-default = "0.7.1"
@@ -68,14 +67,13 @@ tokio-sctp = "0.2.0"
 valuable = "0.1.0"
 statig = {version = "0.3.0", features = ["async"]}
 non-empty-string = "0.2.6"
-
-# Depenedency of tokio-sctp
-socket2 = "0.4"
 derive-new = "0.7"
 faster-hex = "0.10.0"
 nonempty = { version = "0.8.1", features = ["serialize"] }
 bitvec = "1.0.1"
 ascii = "1.1.0"
+atomic_enum = "0.3.0"
+socket2 = "0.4" # Depenedency of tokio-sctp
 
 oasbi = { git = "https://github.com/UnifyAir/open-api.git/", package = "oasbi", branch = "master" }
 openapi-smf = { git = "https://github.com/UnifyAir/open-api.git/", package = "openapi-smf", features = [
@@ -96,4 +94,3 @@ openapi-nrf = { git = "https://github.com/UnifyAir/open-api.git/", package = "op
 ngap-models = { git = "https://github.com/UnifyAir/asn-models.git/", package = "ngap", branch = "master" }
 asn1-per = { git = "https://github.com/UnifyAir/asn-models.git/", package = "asn1-per", branch = "master" }
 nas-models = { git = "https://github.com/UnifyAir/nas-models.git/", package = "nas-models", branch = "master" }
-

@@ -4,10 +4,10 @@ use nas_models::message as nas_message;
 use nas_models::types as nas_types;
 use non_empty_string::NonEmptyString;
 
-use crate::nas::error::NasHandlerError;
-use crate::nas::NasContext;
-use crate::nas::UeContext;
-use crate::nas::NasHandler;
+use crate::nas_old::error::NasHandlerError;
+use crate::nas_old::NasContext;
+use crate::nas_old::UeContext;
+use crate::nas_old::NasHandler;
 
 
 fn initial_registration_handler(nas_registration_request: &nas_message::NasRegistrationRequest, nas_context:&mut NasContext, ue_context: &mut UeContext) -> Result<(), NasHandlerError>{
